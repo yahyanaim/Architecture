@@ -2,8 +2,6 @@ import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '../../domain/services/UserService';
 import { InMemoryUserRepository } from '../../infrastructure/repositories/InMemoryUserRepository';
-import { NeonUserRepository } from '../../infrastructure/repositories/NeonUserRepository';
-import { sql } from '../../infrastructure/neon';
 
 const router = Router();
 
@@ -13,15 +11,14 @@ const router = Router();
 // ==========================================
 
 // 1. Instantiate the Repository (Infrastructure Layer)
-// Automatically switch to Neon if DATABASE_URL is provided
-const userRepository = sql
-    ? new NeonUserRepository()
-    : new InMemoryUserRepository();
+const userRepository = new InMemoryUserRepository();
 
 // 2. Instantiate the Service (Domain Layer)
+// Injecting the repository via constructor
 const userService = new UserService(userRepository);
 
 // 3. Instantiate the Controller (API Layer)
+// Injecting the service via constructor
 const userController = new UserController(userService);
 
 // ==========================================
