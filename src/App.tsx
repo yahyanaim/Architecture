@@ -43,7 +43,7 @@ export default function App() {
             </div>
 
             {activeTab === 'architecture' && (
-              <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 text-left max-w-6xl mx-auto animate-in fade-in duration-500">
+              <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 text-left max-w-6xl mx-auto">
                 {/* Frontend Card */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 transition-all hover:shadow-md">
                   <h3 className="font-semibold text-black mb-4 flex items-center gap-2">
@@ -118,7 +118,7 @@ export default function App() {
             )}
 
             {activeTab === 'demo' && (
-              <div className="mt-12 max-w-3xl mx-auto text-left animate-in fade-in duration-500">
+              <div className="mt-12 max-w-3xl mx-auto text-left">
                 <div className="mb-8">
                   <h3 className="text-xl font-semibold text-black">Users Feature Demo</h3>
                   <p className="text-sm text-gray-500 mt-1">
