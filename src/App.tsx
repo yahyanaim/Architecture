@@ -1,8 +1,8 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/react-query';
 import { Toaster } from '@/components/ui/sonner';
-import { Linkedin, Instagram, Facebook, X, Workflow, Briefcase, Layers, FolderTree } from 'lucide-react';
-import { SiReact, SiVite, SiTailwindcss, SiReactquery, SiShadcnui, SiExpress, SiSqlite, SiSwagger } from 'react-icons/si';
+import { Instagram, Facebook, X, Workflow, Briefcase, Layers, FolderTree } from 'lucide-react';
+import { SiReact, SiVite, SiTailwindcss, SiReactquery, SiShadcnui, SiExpress, SiSqlite, SiSwagger, SiDevdotto } from 'react-icons/si';
 import { useState } from 'react';
 import { UserList } from './features/users/components/UserList';
 import { CreateUserForm } from './features/users/components/CreateUserForm';
@@ -25,8 +25,8 @@ export default function App() {
               <button
                 onClick={() => setActiveTab('architecture')}
                 className={`px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'architecture'
-                    ? 'bg-black text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  ? 'bg-black text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                   }`}
               >
                 Architecture Overview
@@ -34,8 +34,8 @@ export default function App() {
               <button
                 onClick={() => setActiveTab('demo')}
                 className={`px-4 py-2 rounded-md font-medium transition-colors ${activeTab === 'demo'
-                    ? 'bg-black text-white'
-                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                  ? 'bg-black text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                   }`}
               >
                 Live Demo (Users Feature)
@@ -139,8 +139,8 @@ export default function App() {
               <p className="text-gray-400 text-sm mt-1">© {currentYear} All rights reserved</p>
             </div>
             <div className="flex items-center gap-6 mt-2">
-              <a href="https://www.linkedin.com/in/yahia-naim/" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#0A66C2] transition-colors" aria-label="LinkedIn">
-                <Linkedin className="w-5 h-5" />
+              <a href="https://dev.to/yahyanaim" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-black transition-colors" aria-label="Dev.to">
+                <SiDevdotto className="w-5 h-5" />
               </a>
               <a href="https://x.com/yahya_naim" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-black transition-colors" aria-label="X (Twitter)">
                 <X className="w-5 h-5" />
