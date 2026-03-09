@@ -1,46 +1,30 @@
-# Architecture Blueprint
+# How it's built
 
-This document provides a comprehensive architectural blueprint for a production-ready, enterprise-grade full-stack application using Node.js and React, adhering to Clean Architecture and Domain-Driven Design (DDD) principles.
+This is a clean, layered setup using Node and React. It follows **Clean Architecture** and **DDD** rules to keep the business logic separate from the database and the web framework.
 
-## 1. High-Level Architecture Overview
+## Core concepts
 
-We use a Hexagonal Architecture (Ports and Adapters) approach. The core principle is that dependencies point inwards. The Domain layer knows nothing about the database or the HTTP framework.
+We use a **Hexagonal (Ports and Adapters)** flow. Dependencies always point inward—the domain logic shouldn't care if you're using Express, Fastify, Postgres, or a JSON file.
 
-### Communication Flow
-`Client (React)` → `HTTP Layer (Express)` → `Controller` → `Service (Domain)` → `Repository Interface` → `Repository Implementation (Infra)` → `Database`
+### Data flow
+`React` → `Express` → `Controller` → `Domain Service` → `Repository Interface` → `Implementation (Infra)` → `DB`
 
 ---
 
-## 2. Backend Architecture (Node.js + TypeScript)
+## Backend (Node + TS)
 
-This structure enforces strict separation of concerns.
+This structure keeps things modular.
 
-### Folder Tree
-```text
-server/
-├── api/                        # Application Layer (HTTP Entry Point)
-│   ├── controllers/            # HTTP Request/Response handling
-│   ├── dtos/                   # Data Transfer Objects (Zod schemas)
-│   ├── middlewares/            # Express middlewares (Auth, Error handling)
-│   └── routes/                 # Express route definitions
-├── domain/                     # Business Layer (Pure Logic)
-│   ├── entities/               # Rich domain models with behavior
-│   ├── exceptions/             # Custom domain exceptions
-│   ├── interfaces/             # Ports (Repository interfaces)
-│   └── services/               # Application services orchestrating logic
-├── infrastructure/             # Infrastructure Layer (Adapters)
-│   ├── database/               # Database connection/ORM config
-│   ├── jobs/                   # Scheduled tasks/cron jobs
-│   ├── messaging/              # Event bus/message queue implementations
-│   └── repositories/           # DAO layer (implements domain interfaces)
-├── config/                     # Global configuration (Swagger, env)
-└── app.ts                      # Express app setup and IoC wiring
-```
+### Layers
 
-### Layer Responsibilities & Code Examples
+- **api/**: The setup for Express routes, controllers, and middlewares. No logic here, just handling requests.
+- **domain/**: The "brain" of the app. Pure logic, models, and interfaces. Zero dependencies on external libs.
+- **infrastructure/**: The "hands" of the app. Handles DB connections, mailers, and external APIs. This is where domain interfaces get implemented.
 
-#### A. Domain Layer (Pure Business Logic)
-**Responsibility:** Contains the core business rules. It has **zero dependencies** on Express, Postgres, or any other external library.
+### Examples
+
+#### Domain (Business Logic)
+This has **no dependencies** on Express or your DB. It’s just pure TypeScript logic.
 
 *Entity Example (`server/domain/entities/User.ts`):*
 ```typescript
@@ -85,8 +69,8 @@ export class UserService {
 }
 ```
 
-#### B. Infrastructure Layer (DAO & External Services)
-**Responsibility:** Implements the interfaces defined by the Domain layer. This is the only layer that knows about SQL, ORMs, or external APIs.
+#### Infrastructure (Adapters)
+Implements the interfaces defined in the domain. Only this layer knows about SQL or external SDKs.
 
 *Repository Example (`server/infrastructure/repositories/PostgresUserRepository.ts`):*
 ```typescript
@@ -100,8 +84,8 @@ export class PostgresUserRepository implements IUserRepository {
 }
 ```
 
-#### C. API Layer (HTTP & Controllers)
-**Responsibility:** Handles HTTP requests, validates input using DTOs, calls the Domain Service, and formats the HTTP response. **No business logic belongs here.**
+#### API (HTTP)
+Wraps everything in Express. It validates inputs, calls the service, and sends back JSON.
 
 *Controller Example (`server/api/controllers/UserController.ts`):*
 ```typescript
