@@ -1,23 +1,24 @@
-import express from "express";
+import 'dotenv/config';
 import { createServer as createViteServer } from "vite";
 import { app } from "./server/app";
 
-// spins up express + vite together so we don't need two terminals
 async function startServer() {
-  const PORT = 4000;
-
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 40001;
+  
   if (process.env.NODE_ENV !== "production") {
-    // hook vite into express for HMR in dev
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: { overlay: false } },
       appType: "spa",
     });
-    app.use(vite.middlewares);
+    app.use((req, res, next) => {
+      if (!req.url.startsWith('/api')) {
+        return vite.middlewares(req, res, next);
+      }
+      next();
+    });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`up on :${PORT}`);
-  });
+  
+  app.listen(PORT, "0.0.0.0", () => console.log(`up on :${PORT}`));
 }
 
 startServer();

@@ -1,0 +1,66 @@
+import { IUserRepository } from '../interfaces/IUserRepository';
+import { User } from '../entities/User';
+import { NotFoundException } from '../exceptions/NotFoundException';
+import { BusinessException } from '../exceptions/BusinessException';
+
+export interface UpdateProfileInput {
+  name?: string;
+  email?: string;
+}
+
+export class ProfileService {
+  constructor(private readonly userRepository: IUserRepository) { }
+
+  async getProfile(userId: string): Promise<User> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  }
+
+  async updateProfile(userId: string, updates: UpdateProfileInput): Promise<User> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (updates.email && updates.email !== user.email) {
+      const existingUser = await this.userRepository.findByEmail(updates.email);
+      if (existingUser && existingUser.id !== userId) {
+        throw new BusinessException('Email already in use');
+      }
+      user.email = updates.email;
+    }
+
+    if (updates.name) {
+      user.name = updates.name;
+    }
+
+    await this.userRepository.save(user);
+    return user;
+  }
+
+  async deleteAccount(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    await this.userRepository.delete(userId);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isValid = await user.comparePassword(currentPassword);
+    if (!isValid) {
+      throw new BusinessException('Current password is incorrect');
+    }
+
+    user.password = await User.hashPassword(newPassword);
+    await this.userRepository.save(user);
+  }
+}

@@ -16,4 +16,5 @@ export interface UserResponseDTO {
   email: string;
   createdAt: string;
   isActive: boolean;
+  role: 'admin' | 'user';
 }

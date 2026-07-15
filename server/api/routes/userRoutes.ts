@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '../../domain/services/UserService';
-import { InMemoryUserRepository } from '../../infrastructure/repositories/InMemoryUserRepository';
+import { userRepository } from '../../infrastructure/repositories/SharedUserRepository';
+import { authenticate } from '../middleware/authenticate';
+import { authorizeAdmin } from '../middleware/authorize';
 
 const router = Router();
 
@@ -10,8 +12,7 @@ const router = Router();
 // Manual Dependency Injection Setup
 // ==========================================
 
-// 1. Instantiate the Repository (Infrastructure Layer)
-const userRepository = new InMemoryUserRepository();
+// 1. Use the shared repository singleton so that auth and user routes operate on the same data store.
 
 // 2. Instantiate the Service (Domain Layer)
 // Injecting the repository via constructor
@@ -23,6 +24,7 @@ const userController = new UserController(userService);
 
 // ==========================================
 // Route Definitions
+// All user management routes require authentication
 // ==========================================
 
 /**
@@ -31,6 +33,8 @@ const userController = new UserController(userService);
  *   post:
  *     summary: Create a new user
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -50,8 +54,12 @@ const userController = new UserController(userService);
  *         description: User created successfully
  *       400:
  *         description: Validation or Business error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: 'Forbidden: Admin access required'
  */
-router.post('/', userController.createUser);
+router.post('/', authenticate, authorizeAdmin, userController.createUser);
 
 /**
  * @swagger
@@ -59,11 +67,15 @@ router.post('/', userController.createUser);
  *   get:
  *     summary: Get all users
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: List of users
+ *       401:
+ *         description: Unauthorized
  */
-router.get('/', userController.getAllUsers);
+router.get('/', authenticate, userController.getAllUsers);
 
 /**
  * @swagger
@@ -71,6 +83,8 @@ router.get('/', userController.getAllUsers);
  *   patch:
  *     summary: Toggle user active status
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -82,8 +96,10 @@ router.get('/', userController.getAllUsers);
  *         description: User status toggled
  *       404:
  *         description: User not found
+ *       401:
+ *         description: Unauthorized
  */
-router.patch('/:id/status', userController.toggleStatus);
+router.patch('/:id/status', authenticate, authorizeAdmin, userController.toggleStatus);
 
 /**
  * @swagger
@@ -91,6 +107,8 @@ router.patch('/:id/status', userController.toggleStatus);
  *   delete:
  *     summary: Delete a user
  *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -102,7 +120,10 @@ router.patch('/:id/status', userController.toggleStatus);
  *         description: User deleted
  *       404:
  *         description: User not found
+ *       401:
+ *         description: Unauthorized
  */
-router.delete('/:id', userController.deleteUser);
+router.delete('/:id', authenticate, authorizeAdmin, userController.deleteUser);
 
 export { router as userRoutes };
+

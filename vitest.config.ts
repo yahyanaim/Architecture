@@ -12,5 +12,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    env: {
+      JWT_SECRET: 'test-secret-key-for-testing-only',
+      NODE_ENV: 'test',
+    },
   },
 });

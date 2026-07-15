@@ -5,12 +5,5 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Handle global errors (e.g., 401 Unauthorized)
-    return Promise.reject(error);
-  }
-);

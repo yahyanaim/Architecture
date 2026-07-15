@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { userApi } from '../api/userApi';
 import { toast } from 'sonner';
+import axios from 'axios';
 
 export function CreateUserForm() {
   const [name, setName] = useState('');
@@ -16,8 +17,11 @@ export function CreateUserForm() {
       setEmail('');
       queryClient.invalidateQueries({ queryKey: ['users'] });
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to create user');
+    onError: (error: unknown) => {
+      const message = axios.isAxiosError(error)
+        ? (error.response?.data as { message?: string })?.message ?? 'Failed to create user'
+        : 'Failed to create user';
+      toast.error(message);
     }
   });
 

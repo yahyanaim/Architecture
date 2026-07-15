@@ -1,20 +1,22 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
-import { errorHandler } from './api/middlewares/errorHandler';
+import { errorHandler } from './api/middleware/errorHandler';
+import { requestId } from './api/middleware/requestId';
 
 import { swaggerSpec } from './config/swagger';
 import swaggerUi from 'swagger-ui-express';
 import { userRoutes } from './api/routes/userRoutes';
+import { authRoutes } from './api/routes/authRoutes';
+import { profileRoutes } from './api/routes/profileRoutes';
 
 const app = express();
 
-// needed so req.ip works behind a proxy
 app.set('trust proxy', 1);
 
-// 100 reqs / 15 min per IP
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -27,21 +29,30 @@ const apiLimiter = rateLimit({
 app.use('/api', apiLimiter);
 
 app.use(express.json());
-app.use(cors());
+app.use(cookieParser());
+app.use(requestId);
+
+const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:4000';
+app.use(cors({ origin: allowedOrigin, credentials: true }));
+
 app.use(helmet({
-  contentSecurityPolicy: false, // off for vite dev
+  contentSecurityPolicy: process.env.NODE_ENV === 'production',
 }));
 
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
+
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/profile', profileRoutes);
 
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// must be last
 app.use(errorHandler);
 
 export { app };

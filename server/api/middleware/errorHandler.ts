@@ -5,25 +5,27 @@ import { StatusCodes } from 'http-status-codes';
 
 export const errorHandler = (
   err: Error,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction
-) => {
+  _next: NextFunction
+): void => {
   console.error('[Error]', err);
 
   if (err instanceof ValidationException) {
-    return res.status(err.statusCode).json({
+    res.status(err.statusCode).json({
       error: 'Validation Error',
       message: err.message,
       details: err.errors,
     });
+    return;
   }
 
   if (err instanceof AppError) {
-    return res.status(err.statusCode).json({
+    res.status(err.statusCode).json({
       error: err.name,
       message: err.message,
     });
+    return;
   }
 
   // fallback

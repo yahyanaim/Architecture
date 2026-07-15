@@ -4,6 +4,11 @@ import { BusinessException } from '../exceptions/BusinessException';
 import { NotFoundException } from '../exceptions/NotFoundException';
 import crypto from 'crypto';
 
+/** Generates a cryptographically secure random temporary password. */
+function generateTemporaryPassword(): string {
+  return crypto.randomBytes(24).toString('base64url');
+}
+
 export class UserService {
   constructor(private readonly userRepository: IUserRepository) { }
 
@@ -13,7 +18,8 @@ export class UserService {
       throw new BusinessException('User with this email already exists');
     }
 
-    const user = new User(crypto.randomUUID(), name, email, new Date(), true);
+    const tempPassword = generateTemporaryPassword();
+    const user = await User.create(name, email, tempPassword, 'user');
     await this.userRepository.save(user);
     return user;
   }

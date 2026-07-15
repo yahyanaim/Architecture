@@ -1,12 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { UserService } from '../../domain/services/UserService';
 import { CreateUserSchema, UserResponseDTO } from '../dtos/UserDTO';
 import { ValidationException } from '../../domain/exceptions/ValidationException';
+import { AuthRequest } from '../middleware/authenticate';
+import { audit } from '../../infrastructure/audit';
+
+const UuidParamSchema = z.object({
+  id: z.string().uuid('Invalid user ID format'),
+});
 
 export class UserController {
   constructor(private readonly userService: UserService) { }
 
-  createUser = async (req: Request, res: Response, next: NextFunction) => {
+  createUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const parseResult = CreateUserSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -21,7 +28,8 @@ export class UserController {
         name: user.name,
         email: user.email,
         createdAt: user.createdAt.toISOString(),
-        isActive: user.isActive
+        isActive: user.isActive,
+        role: user.role
       };
 
       res.status(201).json(response);
@@ -30,7 +38,7 @@ export class UserController {
     }
   };
 
-  getAllUsers = async (req: Request, res: Response, next: NextFunction) => {
+  getAllUsers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const users = await this.userService.getAllUsers();
 
@@ -39,7 +47,8 @@ export class UserController {
         name: user.name,
         email: user.email,
         createdAt: user.createdAt.toISOString(),
-        isActive: user.isActive
+        isActive: user.isActive,
+        role: user.role
       }));
 
       res.status(200).json(response);
@@ -48,9 +57,14 @@ export class UserController {
     }
   };
 
-  toggleStatus = async (req: Request, res: Response, next: NextFunction) => {
+  toggleStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { id } = req.params;
+      const parseResult = UuidParamSchema.safeParse(req.params);
+      if (!parseResult.success) {
+        throw new ValidationException('Invalid user ID', parseResult.error.format());
+      }
+      const { id } = parseResult.data;
+
       const user = await this.userService.toggleUserStatus(id);
 
       const response: UserResponseDTO = {
@@ -58,7 +72,8 @@ export class UserController {
         name: user.name,
         email: user.email,
         createdAt: user.createdAt.toISOString(),
-        isActive: user.isActive
+        isActive: user.isActive,
+        role: user.role
       };
 
       res.status(200).json(response);
@@ -67,10 +82,17 @@ export class UserController {
     }
   };
 
-  deleteUser = async (req: Request, res: Response, next: NextFunction) => {
+  deleteUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { id } = req.params;
+      const parseResult = UuidParamSchema.safeParse(req.params);
+      if (!parseResult.success) {
+        throw new ValidationException('Invalid user ID', parseResult.error.format());
+      }
+      const { id } = parseResult.data;
+
+      const authReq = req as AuthRequest;
       await this.userService.deleteUser(id);
+      audit('user.deleted', authReq.user?.userId ?? 'unknown', { targetUserId: id });
       res.status(204).send();
     } catch (error) {
       next(error);

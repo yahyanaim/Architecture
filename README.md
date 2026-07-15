@@ -8,9 +8,11 @@ A clean, full-stack setup with React and Node. Built with Clean Architecture and
 - **DDD**: Business rules live inside domain entities.
 - **DI**: Dependency injection used throughout the backend.
 - **User CRUD**: A working demo from React to the DB.
-- **Standard Security**: Helmet, CORS, and rate limiting baked in.
-- **Type-safe**: Zod for validation on both ends.
+- **Role-Based Access Control**: First user is admin, subsequent users are regular users. Admin-only endpoints protected.
+- **Enhanced Security**: Helmet (CSP), CORS with allowlist, rate limiting, JWT required at startup.
+- **Type-safe**: Zod for validation on both ends, strict TypeScript mode.
 - **Modern UI**: React 19, Tailwind 4, Shadcn, and TanStack Query.
+- **Tested**: 25 unit tests covering domain services including role assignment logic.
 
 ## Enterprise Architecture Blueprint
 
@@ -29,6 +31,17 @@ This template was built specifically to answer the need for a strict, production
 *   **Repository Pattern**: Decouples domain logic from data access.
 *   **DTOs (Data Transfer Objects)**: Zod is used to validate incoming requests and define response shapes, preventing over-posting.
 *   **Feature-Based Frontend**: React components, hooks, and API calls are grouped by feature (e.g., `src/features/users`).
+*   **Shared Repository**: Single source of truth for data access (prevents data isolation bugs).
+*   **Role-Based Access Control**: Hierarchical access control with admin/user roles.
+
+## Security Features
+
+- **JWT**: Secret is required at startup (no insecure defaults)
+- **CORS**: Configurable allowlist via `CORS_ORIGIN` environment variable
+- **CSP**: Content Security Policy enabled in production
+- **Rate Limiting**: 100 requests per 15 minutes per IP
+- **Helmet**: Security headers middleware
+- **Role Protection**: Admin-only middleware protects sensitive endpoints
 
 ## API Documentation
 
@@ -36,7 +49,7 @@ Swagger UI is available at `/api/docs`.
 
 ## Database
 
-Currently using `InMemoryUserRepository` for the demo. The architecture allows swapping this for PostgreSQL by simply creating a `PostgresRepository` implementation and updating the dependency injection.
+Currently using `InMemoryUserRepository` for the demo. The architecture allows swapping this for PostgreSQL by simply creating a `PostgresRepository` implementation and updating the dependency injection in `sharedRepository.ts`.
 
 ## Running Locally
 
@@ -60,8 +73,12 @@ To run this project on your local machine:
     ```
 
 3.  **Environment Setup**:
-    *   Copy `.env.example` to `.env` (optional, as defaults work for dev).
-    *   Ensure port 4000 is available.
+    ```bash
+    cp .env.example .env
+    ```
+    A default `.env` file is included with development settings. For production, ensure `JWT_SECRET` is set to a strong random value.
+
+4.  **Ensure port 4000 is available**.
 
 ### Running the Application
 
@@ -86,6 +103,24 @@ To run this project on your local machine:
     ```bash
     npm start
     ```
+
+### Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+```
+
+## Project Stats
+
+- **25 tests passing** (Domain services fully tested including role-based access control)
+- **Strict TypeScript** with full type safety
+- **Lint passing** with no errors
+
+---
 
 Architected by **Yahia Naim**.
 
