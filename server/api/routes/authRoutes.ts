@@ -21,13 +21,26 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// SIGNUP ABUSE THROTTLE (separate, stricter): registration mints a whole
+// workspace (org + subscription row), so bot signups are far more expensive
+// than failed logins. 3 new orgs / hour / IP. Legitimate users never notice;
+// signup farms hit a wall. (Longer-term: CAPTCHA or verification-before-use
+// on top — see `requireVerified`, currently opt-in per route.)
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: 'Too many accounts created from this IP, please try again later',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Session + single-use flows need the full port set (users, orgs,
 // subscriptions, tokens). Wired once here — the composition root for auth.
 const authService = new AuthService(userRepository, orgRepository, billingRepository, tokenStore);
 const requireActiveUser = createRequireActiveUser(userRepository);
 const authController = new AuthController(authService, jobQueue);
 
-router.post('/register', authLimiter, authController.register);
+router.post('/register', registerLimiter, authController.register);
 router.post('/login', authLimiter, loginAccountLimiter, authController.login);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);

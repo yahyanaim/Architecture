@@ -63,11 +63,6 @@ export class SqliteUserRepository implements IUserRepository {
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
   }
 
-  async findAll(): Promise<User[]> {
-    const rows = db.prepare('SELECT * FROM users ORDER BY created_at ASC').all() as Row[];
-    return rows.map(toEntity);
-  }
-
   async hasUsers(): Promise<boolean> {
     const row = db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number };
     return row.n > 0;

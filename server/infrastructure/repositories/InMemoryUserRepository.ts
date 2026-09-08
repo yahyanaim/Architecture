@@ -35,10 +35,6 @@ export class InMemoryUserRepository implements IUserRepository {
     this.users.delete(id);
   }
 
-  async findAll(): Promise<User[]> {
-    return Array.from(this.users.values());
-  }
-
   async hasUsers(): Promise<boolean> {
     return this.users.size > 0;
   }

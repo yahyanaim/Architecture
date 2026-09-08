@@ -10,6 +10,9 @@ import { User } from '../entities/User';
 // TENANCY RULE: identity lookups (`findByEmail`) are global; data-access
 // listings are org-scoped (`findByEmailAndOrg`, `findAllByOrg`). Services
 // must use the scoped variants whenever acting within a tenant context.
+// NOTE: there is deliberately NO unscoped `findAll` on this port — a global
+// user dump is a cross-tenant leak waiting to happen. Instance-level support
+// tooling gets its own audited path if ever needed, not this port.
 export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
@@ -17,6 +20,5 @@ export interface IUserRepository {
   findAllByOrg(orgId: string): Promise<User[]>;
   save(user: User): Promise<void>;
   delete(id: string): Promise<void>;
-  findAll(): Promise<User[]>;
   hasUsers(): Promise<boolean>;
 }

@@ -88,13 +88,20 @@ export class UserController {
 
   toggleStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Tenant binding (see createUser): the service enforces target-in-org,
+      // but the org itself must come from the server-side chain, not params.
+      const tenantReq = req as ActiveUserRequest;
+      if (!tenantReq.tenant) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
       const parseResult = UuidParamSchema.safeParse(req.params);
       if (!parseResult.success) {
         throw new ValidationException('Invalid user ID', parseResult.error.format());
       }
       const { id } = parseResult.data;
 
-      const user = await this.userService.toggleUserStatus(id);
+      const user = await this.userService.toggleUserStatus(id, tenantReq.tenant.orgId);
 
       const response: UserResponseDTO = {
         id: user.id,
@@ -113,14 +120,18 @@ export class UserController {
 
   deleteUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const authReq = req as ActiveUserRequest;
+      if (!authReq.tenant) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
       const parseResult = UuidParamSchema.safeParse(req.params);
       if (!parseResult.success) {
         throw new ValidationException('Invalid user ID', parseResult.error.format());
       }
       const { id } = parseResult.data;
 
-      const authReq = req as ActiveUserRequest;
-      await this.userService.deleteUser(id);
+      await this.userService.deleteUser(id, authReq.tenant.orgId);
       audit('user.deleted', authReq.user?.userId ?? 'unknown', { targetUserId: id });
       res.status(204).send();
     } catch (error) {

@@ -7,8 +7,10 @@ import { User } from '../../domain/entities/User';
  * This is a reference stub — implement each method using your preferred
  * Postgres driver (e.g. `pg`, `@neondatabase/serverless`, `drizzle-orm`).
  *
- * When ready, update the singleton in SharedUserRepository.ts to use this
- * class instead of FileUserRepository. No other files need to change.
+ * When ready, update the singletons in SharedUserRepository.ts to use this
+ * class (plus Postgres siblings for the org/sub/token ports) instead of the
+ * SQLite adapters. No other files need to change. Reuse
+ * `server/infrastructure/db/migrations` (portable SQL).
  *
  * Example (with `pg` Pool):
  *   constructor(private readonly db: Pool) {}
@@ -35,10 +37,6 @@ export class PostgresUserRepository implements IUserRepository {
   }
 
   async save(user: User): Promise<void> {
-    throw new Error('Not implemented. See doc comment above.');
-  }
-
-  async findAll(): Promise<User[]> {
     throw new Error('Not implemented. See doc comment above.');
   }
 

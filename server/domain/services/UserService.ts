@@ -48,9 +48,13 @@ export class UserService {
     return { user, inviteToken };
   }
 
-  async toggleUserStatus(id: string): Promise<User> {
+  // ID-ORACLE GUARD (tenancy): mutations by :id MUST prove the target lives
+  // in the caller's org. Missing OR foreign both answer 404 — a 403 would
+  // confirm the account exists in another tenant (existence oracle). Without
+  // this, an admin in org A could toggle/delete users in org B by UUID.
+  async toggleUserStatus(id: string, orgId: string): Promise<User> {
     const user = await this.userRepository.findById(id);
-    if (!user) {
+    if (!user || user.orgId !== orgId) {
       throw new NotFoundException('User not found');
     }
 
@@ -59,9 +63,9 @@ export class UserService {
     return user;
   }
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(id: string, orgId: string): Promise<void> {
     const user = await this.userRepository.findById(id);
-    if (!user) {
+    if (!user || user.orgId !== orgId) {
       throw new NotFoundException('User not found');
     }
     await this.userRepository.delete(id);

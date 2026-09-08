@@ -1,7 +1,7 @@
 # AUDIT — Solid Starter SaaS Assessment
 
 **Date:** September 2026 · **Method:** code read (all layers) + executed verification
-**Evidence (this session):** `tsc --noEmit` clean · Vitest **9 files / 54 tests pass** ·
+**Evidence (this session):** `tsc --noEmit` clean · Vitest **10 files / 58 tests pass** ·
 live server: `GET /health` 200, unauthenticated `/api/users` 401 ·
 SQLite live: 8 tables, migration `001_init` applied, 4 users / 2 orgs / 2 subscriptions / 3 jobs ·
 secret scan clean · no sensitive files tracked in git.
@@ -24,7 +24,7 @@ gated path to scale, both prepared for. Details per domain below.
 | Background jobs & mail | 8/10 | Durable queue, backoff, dead-letter, swappable `Mailer`; single-process worker |
 | Data & migrations | 8/10 | Ledgered portable SQL, boot-ordered, legacy import; SQLite ceiling noted |
 | Observability | 7/10 | JSON logs, metrics endpoint, 5xx hook; no distributed tracing/APM |
-| Testing | 8/10 | 54 tests incl. theft, tenancy, adapters, queue; no HTTP auth tests (deliberate), no E2E |
+| Testing | 8/10 | 58 tests incl. theft, tenancy, cross-org guards, tripwire, adapters, queue; no HTTP auth tests (deliberate), no E2E |
 | Docs | 9/10 | ARCHITECTURE + KICKOFF + SCENARIO + USAGE + REVIEW mutually consistent (verified by grep) |
 | Repo hygiene | 10/10 | No secrets, DB, outbox, or logs tracked; runtime files gitignored |
 
@@ -35,7 +35,7 @@ gated path to scale, both prepared for. Details per domain below.
 3. **Tenancy is structural.** `org_id` on tenant tables, scoped repository signatures, tenant from `req.tenant` only — a new feature following `SAAS_KICKOFF.md` cannot accidentally go cross-tenant.
 4. **Fail-closed defaults.** JWT secret refuses prod boot when missing; CORS allowlist is a real array; logout mirrors cookie flags; error responses never leak internals on 5xx.
 5. **Async work is durable.** Jobs survive restarts, retry with backoff, park visibly in `dead`; mail provider is one line behind a port.
-6. **Every claim is tested or logged.** 54 tests cover the risky paths (rotation theft, invite, reset-kills-sessions, tenancy isolation, queue retry→dead); metrics + audit + request IDs cover runtime.
+6. **Every claim is tested or logged.** 58 tests cover the risky paths (rotation theft, invite, reset-kills-sessions, tenancy isolation incl. cross-org id-oracle guards, architecture tripwire, adapters, queue retry→dead); metrics + audit + request IDs cover runtime.
 
 ## Gaps (ranked, with effort)
 

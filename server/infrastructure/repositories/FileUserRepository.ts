@@ -113,8 +113,4 @@ export class FileUserRepository implements IUserRepository {
     const filtered = users.filter(u => u.id !== id);
     writeUsers(filtered);
   }
-
-  async findAll(): Promise<User[]> {
-    return readUsers();
-  }
 }

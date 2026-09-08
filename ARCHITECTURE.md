@@ -116,8 +116,8 @@ Route chain: authenticate (401) -> requireActiveUser (401/403)
 ### Auth (`/api/auth`)
 | Method | Path | Guards | Notes |
 |--------|------|--------|-------|
-| POST | /register | ip limiter | Creates user + org + sub; sets session; enqueues verify email |
-| POST | /login | ip + per-account limiters | Lockout-aware; sets session |
+| POST | /register | 3/hour per IP | Creates user + org + sub; sets session; enqueues verify email |
+| POST | /login | 5/15m per IP + 10/15m per account | Lockout-aware; sets session |
 | POST | /refresh | — | Rotates pair; reuse detected |
 | POST | /logout | — | Revokes refresh; clears cookies |
 | GET | /me | auth + active | Liveness-checked profile |
@@ -150,12 +150,12 @@ Route chain: authenticate (401) -> requireActiveUser (401/403)
 
 ## Security Posture
 
-httpOnly session cookies · bcrypt hashes only · first-user-admin bootstrap (no role input) · 5-fail/15-min lockout + IP (5/15m) + per-account (10/15m) throttles · single-use hashed tokens (verify 24h, reset 1h, invite 7d) · helmet + CORS allowlist array · JWT fail-closed in prod · runtime DB/outbox gitignored · Swagger dev-only.
+httpOnly session cookies · bcrypt hashes only · first-user-admin bootstrap (no role input) · 5-fail/15-min lockout + IP (5/15m) + per-account login (10/15m) + registration (3/hour/IP) throttles · single-use hashed tokens with sensible TTLs · Helmet + CORS allowlist · JWT fail-closed in prod · runtime DB/outbox gitignored · Swagger dev-only.
 
 ## Testing
 
 ```
-Test Files  9 passed (9) · Tests  54 passed (54)
+Test Files  10 passed (10) · Tests  58 passed (58)
 ```
-AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 9 (invite, tenancy scoping) · ProfileService 11 · requireActiveUser 4 · requirePlan 4 · SQLite adapters 3 · job queue 3 · health 1 · App render 2.
-Conventions: services tested against in-file doubles; adapters + queue against real isolated `:memory:` SQLite (`migrate(db)` in `beforeAll`); no HTTP tests except health (rate limiters make HTTP auth tests flaky — test services instead).
+AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 11 (invite, tenancy scoping, cross-org guards) · ProfileService 11 · requireActiveUser 4 · requirePlan 4 · tenancy guard 2 · SQLite adapters 3 · job queue 3 · health 1 · App render 2.
+Conventions: services tested against in-file doubles; adapters + queue against real isolated `:memory:` SQLite (`migrate(db)` in `beforeAll`); architecture tripwire `server/tenancy-guard.test.ts` (SQL org-scope + route-chain order, closed-by-default for new route files); no HTTP tests except health (rate limiters make HTTP auth tests flaky — test services instead).

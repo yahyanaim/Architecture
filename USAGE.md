@@ -123,6 +123,7 @@ SQLite via `better-sqlite3` (`data/app.db`), created and migrated automatically 
 ### Rate Limiting
 - 100 requests per 15 minutes per IP (global `/api`)
 - 5 auth attempts per 15 min per IP + 10 logins per 15 min per account
+- 3 registrations per hour per IP (workspace creation is expensive — signup-abuse throttle)
 
 ### Role Protection
 - Admin-only endpoints protected by middleware

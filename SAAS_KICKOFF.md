@@ -55,4 +55,5 @@
 
 ## 5. Launch checklist
 
-Postgres adapter + `DATABASE_URL` → SMTP/`Mailer` provider → Stripe webhook → `requireVerified` on chosen routes → `requirePlan` on paid routes → `ERROR_WEBHOOK_URL` → `JWT_SECRET` from secrets manager → `npm start` behind TLS proxy (`TRUST_PROXY` set).
+CI runs lint + tests on every push/PR (`.github/workflows/ci.yml`) — keep it green.
+Postgres adapter + `DATABASE_URL` → SMTP/`Mailer` provider → Stripe webhook → `requireVerified` on chosen routes → `requirePlan` on paid routes → `ERROR_WEBHOOK_URL` → `JWT_SECRET` from secrets manager → `npm start` or `docker build` behind TLS proxy (`TRUST_PROXY` set).
