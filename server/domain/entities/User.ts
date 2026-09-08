@@ -4,6 +4,20 @@ import crypto from 'crypto';
 export type UserRole = 'admin' | 'user';
 
 export class User {
+  // DOMAIN INVARIANTS:
+  // - `password` is ALWAYS a bcrypt hash here; plaintext never touches the
+  //   entity (hashing happens in `create()`/`hashPassword()` before storage).
+  // - `failedLoginAttempts`/`lockedUntil` are the brute-force throttle state
+  //   machine: N failures -> lock until T. `isLocked()` self-heals (clears an
+  //   expired lock) so reads never leave stale lock state behind.
+  // - `isActive=false` means administratively disabled: login refuses it and
+  //   `requireActiveUser` rejects its tokens. The entity itself stays dumb —
+  //   enforcement lives in services/middleware, not in field setters.
+  // - TENANCY: `orgId` is the user's workspace. Identity (email) is global so
+  //   login needs no tenant hint; authorization/data access is org-scoped.
+  // - `emailVerifiedAt=null` means unverified. Verification is enforced
+  //   opt-in via `requireVerified` (not on login) so legacy accounts and the
+  //   invite flow never hard-lock during rollout.
   constructor(
     public readonly id: string,
     public name: string,
@@ -13,7 +27,9 @@ export class User {
     public isActive: boolean = true,
     public role: UserRole = 'user',
     public failedLoginAttempts: number = 0,
-    public lockedUntil: Date | null = null
+    public lockedUntil: Date | null = null,
+    public orgId: string = 'default',
+    public emailVerifiedAt: Date | null = null
   ) {
     if (role !== 'admin' && role !== 'user') {
       throw new Error(`Invalid role: ${role}. Must be 'admin' or 'user'`);
@@ -23,6 +39,14 @@ export class User {
   static async create(name: string, email: string, password: string, role: UserRole = 'user'): Promise<User> {
     const hashedPassword = await bcrypt.hash(password, 10);
     return new User(crypto.randomUUID(), name, email, hashedPassword, new Date(), true, role);
+  }
+
+  get isVerified(): boolean {
+    return this.emailVerifiedAt !== null;
+  }
+
+  markVerified(): void {
+    this.emailVerifiedAt = new Date();
   }
 
   static async hashPassword(password: string): Promise<string> {

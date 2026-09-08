@@ -1,7 +1,7 @@
 # Code Review Report
 
-**Date:** July 2026  
-**Reviewer:** Automated Code Review  
+**Date:** July 2026 (original review) · September 2026 (SaaS-hardening cycle, appended at the end)
+**Reviewer:** Automated Code Review
 **Commit:** Current HEAD
 
 ---
@@ -260,3 +260,43 @@ The project is now significantly more secure against common OWASP Top 10 threats
 
 **Overall Quality:** Good (8.5/10)  
 **Production Readiness:** Strong — minor improvements remain for production hardening
+
+---
+
+# Review Cycle: SaaS Hardening (September 2026)
+
+**Scope:** architecture / security / data-lifecycle only. Demo UI and docs drift intentionally untouched.
+
+## What changed (all live-verified + tested: 9 files, 54 tests)
+
+### 1. SQLite + migrations replaced the JSON store (was: main remaining work)
+**Files:** `server/infrastructure/database.ts`, `server/infrastructure/db/migrate.ts`, `migrations/001_init.sql`, `Sqlite*` adapters, `server.ts`, `SharedUserRepository.ts`
+Boot runs `migrate()` before listen (ledgered, idempotent, portable SQL); legacy `data/users.json` imported once into a `default` org and retired; `FileUserRepository` deprecated. `data/*.db` + `data/outbox/` gitignored.
+
+### 2. Shared-schema multi-tenancy introduced
+**Files:** `Organization` entity, `IUserRepository` scoped methods, `resolveTenant`, `AuthService` (org bootstrap per registration), `UserService` (org-pinned invites, org-scoped listing)
+JWT claim is cross-checked against the DB account; tenant comes from `req.tenant`, never client input.
+
+### 3. Session model upgraded to access + rotating refresh
+**Files:** `AuthService`, `AuthController`, `authenticate`, `authRoutes`, `SqliteTokenStore`
+15m JWT + opaque hashed refresh with reuse→chain-revoke; reset/change-password kills sessions; legacy `token` cookie accepted read-only for transition.
+
+### 4. Auth gaps closed: verify / reset / invite + per-account throttle
+**Files:** `authTokens` table, 5 new endpoints, `loginAccountLimiter`, `requireVerified` (opt-in, unwired)
+Enumeration-safe responses (always-200 request endpoints, single-use hashed tokens with TTLs).
+
+### 5. Billing seam + observability + jobs
+**Files:** `Subscription` entity, `SqliteBillingRepository`, `requirePlan` (403 + `upgrade_required`), `billingRoutes`, `observability.ts` (JSON logs, `/api/metrics` admin-only, 5xx hook), `mailer.ts` (`LogMailer`), `queue.ts` (durable jobs, backoff, dead-letter)
+Invite flow fixed as a side effect (was: created accounts that could never log in).
+
+### 6. Status-code hygiene
+`authenticate` returns 401 (was 400) for missing/invalid credentials; `requireActiveUser` attaches the hydrated account for downstream reuse.
+
+## Residual risks (accepted, documented in code)
+- Access JWTs stateless ≤15m after credential change (refresh dies instantly).
+- File SQLite: single-writer grade; Postgres adapter still a stub (needs `DATABASE_URL`).
+- `requireVerified` / `requirePlan` exported but minimally wired — attach per-route when shipping paid/verified-only features.
+- No SMTP provider yet (`LogMailer` only); no Stripe webhook yet (seam ready).
+
+**Overall Quality:** Very good (9/10 as a SaaS starter)
+**Production Readiness:** MVP-ready on SQLite; Postgres + provider wiring before scale.

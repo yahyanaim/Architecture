@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+# Runtime database: local auth state (users, password hashes, lockout
+# counters). Must never be committed — each environment owns its own.
+# The `*` also covers migration backups (users.json.migrated, etc.).
+data/users.json*
+# SQLite store + dev mail outbox (runtime artifacts, per-environment).
+data/*.db
+data/*.db-*
+data/outbox/

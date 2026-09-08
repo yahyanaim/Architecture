@@ -1,11 +1,28 @@
 import 'dotenv/config';
 import { createServer as createViteServer } from "vite";
 import { app } from "./server/app";
+import { PORT, IS_PROD } from "./server/config/index";
+import { migrate } from "./server/infrastructure/db/migrate";
+import { jobQueue } from "./server/infrastructure/repositories/SharedUserRepository";
+import { logger } from "./server/infrastructure/observability";
 
+// Process entry point (dev vs prod lifecycle):
+// - development: mount Vite middleware so the same port serves the API and
+//   the hot-reloading SPA (`/api/*` bypasses Vite and hits Express).
+// - production: `server/app.ts` already serves the built `dist/` SPA
+//   statically, so just listen. Start with `npm start`.
 async function startServer() {
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 40001;
-  
-  if (process.env.NODE_ENV !== "production") {
+  // BOOT ORDER (data before traffic): migrations first so every adapter sees
+  // the full schema; legacy `users.json` import happens here, once.
+  migrate();
+
+  // Background worker (emails, receipts). Skipped under test so suites exit
+  // cleanly; the timer is `unref`'d so it never holds the process open alone.
+  if (process.env.NODE_ENV !== 'test') {
+    jobQueue.startWorker();
+  }
+
+  if (!IS_PROD) {
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: { overlay: false } },
       appType: "spa",
@@ -17,8 +34,17 @@ async function startServer() {
       next();
     });
   }
-  
-  app.listen(PORT, "0.0.0.0", () => console.log(`up on :${PORT}`));
+
+  const server = app.listen(PORT, "0.0.0.0", () => logger.info(`up`, { port: PORT }));
+
+  // Graceful shutdown: stop timers so in-flight jobs finish draining.
+  const shutdown = () => {
+    jobQueue.stopWorker();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 startServer();

@@ -7,12 +7,16 @@ A clean, full-stack setup with React and Node. Built with Clean Architecture and
 - **Strict Layers**: Domain, Infra, and API are completely isolated.
 - **DDD**: Business rules live inside domain entities.
 - **DI**: Dependency injection used throughout the backend.
+- **Multi-tenant SaaS core**: Organizations, org-scoped data, invite flows.
+- **Sessions done right**: short-lived access JWT + rotating hashed refresh tokens with theft detection.
+- **Durable background jobs**: SQLite queue with retries for emails (verify/reset/invite).
+- **Billing seam**: subscription-per-org + plan-gate middleware, Stripe-ready.
 - **User CRUD**: A working demo from React to the DB.
 - **Role-Based Access Control**: First user is admin, subsequent users are regular users. Admin-only endpoints protected.
-- **Enhanced Security**: Helmet (CSP), CORS with allowlist, rate limiting, JWT required at startup.
+- **Enhanced Security**: Helmet (CSP), CORS with allowlist, rate limiting, account lockout, JWT required at startup in prod.
 - **Type-safe**: Zod for validation on both ends, strict TypeScript mode.
 - **Modern UI**: React 19, Tailwind 4, Shadcn, and TanStack Query.
-- **Tested**: 25 unit tests covering domain services including role assignment logic.
+- **Tested**: 54 tests (services, middleware, SQLite adapters, job queue). Full map in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Enterprise Architecture Blueprint
 
@@ -36,7 +40,9 @@ This template was built specifically to answer the need for a strict, production
 
 ## Security Features
 
-- **JWT**: Secret is required at startup (no insecure defaults)
+- **JWT**: Secret is required in production (fail-closed at boot)
+- **Sessions**: 15-min access token + rotating refresh tokens; reuse triggers chain revocation
+- **Verify/Reset/Invite**: Single-use hashed email tokens; enumeration-safe responses
 - **CORS**: Configurable allowlist via `CORS_ORIGIN` environment variable
 - **CSP**: Content Security Policy enabled in production
 - **Rate Limiting**: 100 requests per 15 minutes per IP
@@ -49,7 +55,7 @@ Swagger UI is available at `/api/docs`.
 
 ## Database
 
-Currently using `InMemoryUserRepository` for the demo. The architecture allows swapping this for PostgreSQL by simply creating a `PostgresRepository` implementation and updating the dependency injection in `sharedRepository.ts`.
+SQLite via `better-sqlite3` (`data/app.db`), with idempotent SQL migrations in `server/infrastructure/db/migrations/` that run at boot. Swap in Postgres by implementing the domain ports (see `PostgresUserRepository` stub) — no service changes needed.
 
 ## Running Locally
 
@@ -78,7 +84,7 @@ To run this project on your local machine:
     ```
     A default `.env` file is included with development settings. For production, ensure `JWT_SECRET` is set to a strong random value.
 
-4.  **Ensure port 4000 is available**.
+4.  **Ensure port 40001 is available** (default; override with `PORT`).
 
 ### Running the Application
 
@@ -89,8 +95,8 @@ To run this project on your local machine:
     ```
 
 2.  **Access the App**:
-    *   Frontend: `http://localhost:4000`
-    *   API Docs: `http://localhost:4000/api/docs`
+    *   Frontend: `http://localhost:40001`
+    *   API Docs: `http://localhost:40001/api/docs`
 
 ### Building for Production
 
@@ -116,9 +122,10 @@ npm run test:coverage
 
 ## Project Stats
 
-- **25 tests passing** (Domain services fully tested including role-based access control)
+- **54 tests passing** (services, middleware, SQLite adapters, job queue)
 - **Strict TypeScript** with full type safety
 - **Lint passing** with no errors
+- **New here?** AI agents: read [SAAS_KICKOFF.md](./SAAS_KICKOFF.md) first. Humans: [SAAS_SCENARIO.md](./SAAS_SCENARIO.md) walks a full SaaS build on this base.
 
 ---
 

@@ -29,10 +29,36 @@ export const LoginSchema = z.object({
 
 export type LoginDTO = z.infer<typeof LoginSchema>;
 
+// Single-use token flows (verify / reset / invite-accept) share the password
+// complexity rule with registration — one source of truth per flow.
+export const EmailRequestSchema = z.object({
+  email: z.string().email('Invalid email format').transform(val => val.toLowerCase().trim()),
+});
+
+export const ResetPasswordSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+  newPassword: passwordSchema,
+  confirmNewPassword: z.string(),
+}).refine(data => data.newPassword === data.confirmNewPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmNewPassword'],
+});
+
+export const InviteAcceptSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+  password: passwordSchema,
+  confirmPassword: z.string(),
+  name: z.string().min(3, 'Name must be at least 3 characters').trim().optional(),
+}).refine(data => data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
+
 export interface AuthResponseDTO {
   id: string;
   name: string;
   email: string;
   role: 'admin' | 'user';
-  token: string;
+  emailVerified: boolean;
+  orgId: string;
 }

@@ -26,6 +26,14 @@ export class PostgresUserRepository implements IUserRepository {
     throw new Error('Not implemented. See doc comment above.');
   }
 
+  async findByEmailAndOrg(email: string, orgId: string): Promise<User | null> {
+    throw new Error('Not implemented. See doc comment above.');
+  }
+
+  async findAllByOrg(orgId: string): Promise<User[]> {
+    throw new Error('Not implemented. See doc comment above.');
+  }
+
   async save(user: User): Promise<void> {
     throw new Error('Not implemented. See doc comment above.');
   }

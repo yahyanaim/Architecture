@@ -3,6 +3,11 @@ import path from 'path';
 
 const AUDIT_LOG_PATH = path.join(process.cwd(), 'data', 'audit.log');
 
+// Audit trail (compliance): append-only JSON-lines for security-sensitive
+// domain events (`user.registered`, `user.deleted`, `user.account_deleted`).
+// Called from controllers AFTER the mutation succeeds, never before. Delivery
+// is best-effort by design — persistence failure must never break the user
+// request, hence the silent catch. `*.log` is gitignored so trails stay local.
 export function audit(event: string, actorId: string, details: Record<string, unknown> = {}): void {
   const entry = {
     timestamp: new Date().toISOString(),

@@ -9,10 +9,10 @@ This template provides a clean slate with a robust architectural foundation. It 
 ### Development Workflow
 
 1.  **Start the Development Server**:
-    Run `npm run dev` to start both the Vite frontend and Express backend concurrently on port 4000.
+    Run `npm run dev` to start both the Vite frontend and Express backend concurrently on port 40001 (override with `PORT`).
 
 2.  **Access the App**:
-    Open your browser and navigate to `http://localhost:4000`. You will see the template's landing page detailing the architecture and the Live Demo tab.
+    Open your browser and navigate to `http://localhost:40001`. You will see the template's landing page detailing the architecture and the Live Demo tab.
 
 ## Environment Variables
 
@@ -23,10 +23,14 @@ cp .env.example .env
 ```
 
 Required variables:
-- `JWT_SECRET`: Your JWT signing secret (required at startup)
-- `CORS_ORIGIN`: Allowed CORS origins (default: `http://localhost:4000`)
+- `JWT_SECRET`: Your JWT signing secret (fail-closed in production, dev default otherwise)
+- `CORS_ORIGIN`: Allowed CORS origins, comma-separated (default: `http://localhost:4000`)
 - `NODE_ENV`: Environment (development, production, test)
-- `DB_PATH`: Optional database file path
+- `DB_PATH`: SQLite file path (default: `./data/app.db`)
+- `APP_URL`: Public base URL for email links (verify / reset / invite)
+- `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL_DAYS`: Session lifetimes (defaults: `15m` / `30`)
+- `LOG_LEVEL`, `ERROR_WEBHOOK_URL`: Observability knobs
+- See `.env.example` for mail (`LogMailer` outbox by default) and future Stripe keys.
 
 ## Building Your Own Features
 
@@ -56,23 +60,33 @@ When adding new features, follow the established Clean Architecture layers (as d
 The backend provides a RESTful API documented with Swagger/OpenAPI.
 
 ### Accessing Swagger UI
-Navigate to `/api/docs` (e.g., `http://localhost:4000/api/docs`).
+Navigate to `/api/docs` (e.g., `http://localhost:40001/api/docs`).
 
 ### Available Endpoints
 The template includes the following endpoints out of the box:
 
-**Auth:**
-- `POST /api/auth/register`: Register a new user (first user becomes admin)
-- `POST /api/auth/login`: Login and get JWT token
-- `GET /api/auth/me`: Get current user (requires auth)
+**Auth (sessions: 15-min access JWT + rotating refresh cookie):**
+- `POST /api/auth/register`: Register a new user (first user becomes admin; bootstraps personal org + free subscription; enqueues verify email)
+- `POST /api/auth/login`: Login, sets session cookies (lockout + per-account throttling)
+- `POST /api/auth/refresh`: Rotate the session pair (reuse = theft → chain revoked)
+- `POST /api/auth/logout`: Revoke refresh session, clear cookies
+- `GET /api/auth/me`: Get current user, liveness-checked (requires auth)
+- `POST /api/auth/verify-request` + `GET /api/auth/verify?token=`: Email verification (always-200 request)
+- `POST /api/auth/password-reset-request` + `POST /api/auth/password-reset`: Reset flow (kills all sessions)
+- `POST /api/auth/invite-accept`: Accept org invite (sets password, verifies, auto-login)
 
-**Users:**
-- `GET /api/users`: Retrieves all users (excludes current user)
-- `POST /api/users`: Creates a new user (requires admin role)
-- `PATCH /api/users/:id/status`: Toggles a user's active status.
+**Users (all admin-only, tenant-scoped to caller's org):**
+- `GET /api/users`: List org users
+- `POST /api/users`: Invite a user (emails 7-day single-use link)
+- `PATCH /api/users/:id/status`: Toggles a user's active status (sessions die on next request).
 - `DELETE /api/users/:id`: Deletes a user.
 
-**System:**
+**Profile (auth, own account):**
+- `GET /api/profile`, `PUT /api/profile`, `PUT /api/profile/password` (revokes other sessions), `DELETE /api/profile`
+
+**Billing / System:**
+- `GET /api/billing/subscription`: Current org's plan/status
+- `GET /api/metrics`: Request metrics (admin-only)
 - `GET /api/health`: Returns the server status and timestamp.
 
 As you add new routes to your API layer, update the Swagger configuration to automatically generate documentation for them.
@@ -89,25 +103,26 @@ This template implements a simple role-based access control system:
 
 ## Database
 
-The application currently uses an **In-Memory** database (`InMemoryUserRepository`) for the live demo to ensure zero-config local development.
-- Data is stored in memory and will reset across server restarts.
-- For production, you can easily swap this out for PostgreSQL, SQLite, or another database by:
-  1. Implementing a new repository in the Infrastructure layer
-  2. Updating `sharedRepository.ts` to use your new repository
+SQLite via `better-sqlite3` (`data/app.db`), created and migrated automatically at boot (`server/infrastructure/db/migrations/`, ledgered and idempotent). New schema change = new `NNN_name.sql` file, never edit applied ones.
+- Tenancy: users belong to an org; listings are org-scoped.
+- Tests use an isolated in-memory DB (`NODE_ENV=test`).
+- For Postgres later: implement the domain ports against your driver (see `PostgresUserRepository` stub) and swap the singletons in `SharedUserRepository.ts` — migrations are portable SQL.
 
 ## Security
 
 ### JWT Authentication
-- Tokens are required for protected routes
-- The JWT secret must be set in environment variables (fails at startup if missing)
-- Tokens expire after 30 days
-- Tokens include user role for client-side display
+- Sessions live in httpOnly cookies: short access JWT (`ACCESS_TOKEN_TTL`, default `15m`) + rotating opaque refresh token (default 30d, stored hashed)
+- Refresh reuse triggers chain revocation (theft response)
+- The JWT secret is fail-closed in production (refuses to boot without `JWT_SECRET`)
+- Password reset / change revokes all refresh sessions
+- Single-use email tokens: verify 24h, reset 1h, invite 7d (hashed, atomic consume)
 
 ### CORS
 - Configure allowed origins via `CORS_ORIGIN` environment variable
 
 ### Rate Limiting
-- 100 requests per 15 minutes per IP
+- 100 requests per 15 minutes per IP (global `/api`)
+- 5 auth attempts per 15 min per IP + 10 logins per 15 min per account
 
 ### Role Protection
 - Admin-only endpoints protected by middleware
@@ -130,16 +145,21 @@ npm run test:coverage
 ```
 
 ### Test Coverage
-- **Domain Services**: Fully tested with unit tests including role assignment logic
+- **Domain Services**: Fully tested (register/login/roles/rotation-theft/verify/reset/invite, tenant-scoped users, profile)
+- **Middleware**: `requireActiveUser`, `requirePlan` unit tests
+- **Adapters + queue**: SQLite ports and job lifecycle against isolated in-memory DB
 - **Backend API**: Health check endpoint tested
 - **Frontend**: Component rendering tests
 
 ### Writing Tests
 ```typescript
-// Example: Testing a Domain Service
+// Example: Testing a Domain Service (ports get in-file doubles)
 import { describe, it, expect, beforeEach } from 'vitest';
 import { UserService } from './UserService';
 import { InMemoryUserRepository } from '../../infrastructure/repositories/InMemoryUserRepository';
+
+const fakeTokens = { createAuthToken: async (i: any) => ({ id: 't1', ...i }) } as any;
+const ORG = 'org-test';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -147,13 +167,13 @@ describe('UserService', () => {
 
   beforeEach(() => {
     userRepository = new InMemoryUserRepository();
-    userService = new UserService(userRepository);
+    userService = new UserService(userRepository, fakeTokens);
   });
 
-  it('creates a user with a secure password', async () => {
-    const user = await userService.createUser('John', 'john@example.com');
+  it('creates an invite (login-disabled account + single-use token)', async () => {
+    const { user, inviteToken } = await userService.createUser('John', 'john@example.com', ORG);
     expect(user.name).toBe('John');
-    expect(user.password).toBeDefined();
+    expect(inviteToken).toBeDefined();
   });
 });
 ```
@@ -162,7 +182,8 @@ describe('UserService', () => {
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start development server (Express + Vite) |
+| `npm run dev` | Start development server (Express + Vite, migrations auto-run) |
+| `npm start` | Start production server (serves API + built `dist/` SPA) |
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build |
 | `npm run lint` | Run TypeScript type checking |

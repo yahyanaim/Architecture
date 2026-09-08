@@ -16,6 +16,17 @@ export class InMemoryUserRepository implements IUserRepository {
     return null;
   }
 
+  async findByEmailAndOrg(email: string, orgId: string): Promise<User | null> {
+    for (const user of this.users.values()) {
+      if (user.email === email && user.orgId === orgId) return user;
+    }
+    return null;
+  }
+
+  async findAllByOrg(orgId: string): Promise<User[]> {
+    return Array.from(this.users.values()).filter((u) => u.orgId === orgId);
+  }
+
   async save(user: User): Promise<void> {
     this.users.set(user.id, user);
   }

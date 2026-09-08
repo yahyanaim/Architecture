@@ -1,16 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import { ProfileService } from '../../domain/services/ProfileService';
-import { AuthRequest } from '../middleware/authenticate';
+import { AuthService, ACCESS_COOKIE_MAX_AGE_MS, REFRESH_COOKIE_MAX_AGE_MS } from '../../domain/services/AuthService';
+import { ActiveUserRequest } from '../middleware/requireActiveUser';
 import { UpdateProfileSchema, ChangePasswordSchema, ProfileResponseDTO } from '../dtos/ProfileDTO';
 import { ValidationException } from '../../domain/exceptions/ValidationException';
 import { audit } from '../../infrastructure/audit';
 
 export class ProfileController {
-  constructor(private readonly profileService: ProfileService) { }
+  // `authService` is used ONLY to mint the caller's replacement session after
+  // a password change revokes every session (including theirs). All profile
+  // rules stay in `ProfileService`.
+  constructor(private readonly profileService: ProfileService, private readonly authService: AuthService) { }
 
   getProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const authReq = req as AuthRequest;
+      const authReq = req as ActiveUserRequest;
       if (!authReq.user) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -33,7 +37,7 @@ export class ProfileController {
 
   updateProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const authReq = req as AuthRequest;
+      const authReq = req as ActiveUserRequest;
       if (!authReq.user) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -61,7 +65,7 @@ export class ProfileController {
 
   deleteAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const authReq = req as AuthRequest;
+      const authReq = req as ActiveUserRequest;
       if (!authReq.user) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -76,7 +80,7 @@ export class ProfileController {
 
   changePassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const authReq = req as AuthRequest;
+      const authReq = req as ActiveUserRequest;
       if (!authReq.user) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
@@ -89,6 +93,13 @@ export class ProfileController {
 
       const { currentPassword, newPassword } = parseResult.data;
       await this.profileService.changePassword(authReq.user.userId, currentPassword, newPassword);
+      // Password change revoked ALL sessions (including this one) — mint the
+      // caller's replacement pair so they stay logged in; every other device
+      // must re-authenticate.
+      const tokens = await this.authService.issueSession(authReq.user.userId, authReq.account ?? null, req.ip);
+      const base = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/' };
+      res.cookie('access', tokens.access, { ...base, maxAge: ACCESS_COOKIE_MAX_AGE_MS });
+      res.cookie('refresh', tokens.refresh, { ...base, maxAge: REFRESH_COOKIE_MAX_AGE_MS });
 
       res.json({ message: 'Password changed successfully' });
     } catch (error) {

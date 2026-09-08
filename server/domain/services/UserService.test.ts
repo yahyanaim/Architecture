@@ -1,7 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { UserService } from './UserService';
 import { InMemoryUserRepository } from '../../infrastructure/repositories/InMemoryUserRepository';
-import { User } from '../entities/User';
+import { ITokenStore } from '../../domain/interfaces/ITenant';
+
+// Minimal token-store double: invite creation only needs createAuthToken.
+const fakeTokens = {
+  async createAuthToken(input: any) {
+    return { id: 't1', usedAt: null, createdAt: new Date(), meta: {}, ...input };
+  },
+} as unknown as ITokenStore;
+
+const ORG = 'org-test';
 
 describe('UserService', () => {
   let userService: UserService;
@@ -9,31 +18,32 @@ describe('UserService', () => {
 
   beforeEach(() => {
     userRepository = new InMemoryUserRepository();
-    userService = new UserService(userRepository);
+    userService = new UserService(userRepository, fakeTokens);
   });
 
   describe('createUser', () => {
-    it('creates a user with a secure temporary password', async () => {
-      const user = await userService.createUser('John Doe', 'john@example.com');
+    it('creates an invite (login-disabled account + single-use token)', async () => {
+      const { user, inviteToken } = await userService.createUser('John Doe', 'john@example.com', ORG);
 
       expect(user.name).toBe('John Doe');
       expect(user.email).toBe('john@example.com');
-      expect(user.password).toBeDefined();
-      expect(user.password.length).toBeGreaterThan(20);
+      expect(user.orgId).toBe(ORG);
+      expect(user.isVerified).toBe(false);
+      expect(inviteToken.length).toBeGreaterThan(20);
     });
 
     it('throws BusinessException if email already exists', async () => {
-      await userService.createUser('John Doe', 'john@example.com');
+      await userService.createUser('John Doe', 'john@example.com', ORG);
 
       await expect(
-        userService.createUser('Jane Doe', 'john@example.com')
+        userService.createUser('Jane Doe', 'john@example.com', ORG)
       ).rejects.toThrow('User with this email already exists');
     });
   });
 
   describe('toggleUserStatus', () => {
     it('toggles user active status from true to false', async () => {
-      const user = await userService.createUser('John Doe', 'john@example.com');
+      const { user } = await userService.createUser('John Doe', 'john@example.com', ORG);
       expect(user.isActive).toBe(true);
 
       const toggled = await userService.toggleUserStatus(user.id);
@@ -41,7 +51,7 @@ describe('UserService', () => {
     });
 
     it('toggles user active status from false to true', async () => {
-      const user = await userService.createUser('John Doe', 'john@example.com');
+      const { user } = await userService.createUser('John Doe', 'john@example.com', ORG);
       await userService.toggleUserStatus(user.id);
 
       const toggled = await userService.toggleUserStatus(user.id);
@@ -57,7 +67,7 @@ describe('UserService', () => {
 
   describe('deleteUser', () => {
     it('deletes an existing user', async () => {
-      const user = await userService.createUser('John Doe', 'john@example.com');
+      const { user } = await userService.createUser('John Doe', 'john@example.com', ORG);
       await userService.deleteUser(user.id);
 
       const found = await userRepository.findById(user.id);
@@ -72,16 +82,17 @@ describe('UserService', () => {
   });
 
   describe('getAllUsers', () => {
-    it('returns all users', async () => {
-      await userService.createUser('John Doe', 'john@example.com');
-      await userService.createUser('Jane Doe', 'jane@example.com');
+    it('returns only users of the requesting org (tenancy)', async () => {
+      await userService.createUser('John Doe', 'john@example.com', ORG);
+      await userService.createUser('Jane Doe', 'jane@example.com', 'org-other');
 
-      const users = await userService.getAllUsers();
-      expect(users).toHaveLength(2);
+      const users = await userService.getAllUsers(ORG);
+      expect(users).toHaveLength(1);
+      expect(users[0]!.email).toBe('john@example.com');
     });
 
-    it('returns empty array when no users exist', async () => {
-      const users = await userService.getAllUsers();
+    it('returns empty array when org has no users', async () => {
+      const users = await userService.getAllUsers(ORG);
       expect(users).toHaveLength(0);
     });
   });

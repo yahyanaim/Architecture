@@ -14,6 +14,10 @@ export interface AuthResponse {
   name: string;
   email: string;
   role: UserRole;
+  // Added by the SaaS auth upgrade (backward-compatible: optional here, the
+  // login/register pages ignore them; sessions live in httpOnly cookies).
+  emailVerified?: boolean;
+  orgId?: string;
 }
 
 export const authApi = {

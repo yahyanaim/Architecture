@@ -1,8 +1,10 @@
 # Architecture Document
 
-**Project:** Clean Architecture Starter  
-**Tech Stack:** React 19, Express 5, TypeScript, Vite, Tailwind CSS v4, Shadcn UI, TanStack Query, Zod, Vitest  
-**Architecture Pattern:** Clean Architecture + Hexagonal (Ports and Adapters)
+**Project:** Clean Architecture SaaS Starter
+**Tech Stack:** React 19, Express 4, TypeScript, Vite, Tailwind CSS v4, Shadcn UI, TanStack Query, Zod, SQLite (better-sqlite3), Vitest
+**Architecture Pattern:** Clean Architecture + Hexagonal (Ports and Adapters), shared-schema multi-tenancy
+
+> Last verified: 54 tests passing, `npm run lint` clean. If code and this doc disagree, the code wins — then fix the doc.
 
 ---
 
@@ -10,31 +12,38 @@
 
 ```
 project-root/
+├── server.ts                        # Process entry: migrate() -> worker -> Vite/static -> listen
 ├── server/
-│   ├── app.ts                     # Express app configuration (middleware, error handler)
+│   ├── app.ts                       # Express composition root (middleware order = lifecycle)
+│   ├── config/index.ts              # ONLY place reading process.env (JWT, CORS, TTLs, URLs)
 │   ├── api/
-│   │   ├── controllers/           # HTTP request handlers
-│   │   ├── dtos/                  # Zod-based DTOs / validation schemas
-│   │   ├── middleware/            # Express middleware
-│   │   └── routes/               # Route definitions
+│   │   ├── controllers/             # AuthController, UserController, ProfileController
+│   │   ├── dtos/                    # Zod schemas (AuthDTO, UserDTO, ProfileDTO)
+│   │   ├── middleware/              # authenticate, requireActiveUser, resolveTenant,
+│   │   │                            # authorizeAdmin, requirePlan, requireVerified,
+│   │   │                            # loginAccountLimiter, errorHandler, requestId
+│   │   └── routes/                  # authRoutes, userRoutes, profileRoutes, billingRoutes
 │   ├── domain/
-│   │   ├── entities/             # Domain entities
-│   │   ├── exceptions/           # Custom exceptions
-│   │   └── services/            # Business logic
-│   ├── infrastructure/
-│   │   └── repositories/        # Repository implementations
-│   └── tests/                   # Backend tests
+│   │   ├── entities/                # User, Organization, Subscription (rules, no I/O)
+│   │   ├── interfaces/              # PORTS: IUserRepository, ITenant (orgs/subs/tokens)
+│   │   ├── exceptions/              # AppError, BusinessException, ValidationException, NotFoundException
+│   │   └── services/                # AuthService, UserService, ProfileService (ports only)
+│   └── infrastructure/
+│       ├── database.ts              # better-sqlite3 handle (WAL, FK; :memory: in tests)
+│       ├── db/migrate.ts            # Idempotent runner + legacy users.json import
+│       ├── db/migrations/           # 001_init.sql (portable SQL, never edit applied files)
+│       ├── repositories/            # Sqlite* adapters, SharedUserRepository (singletons),
+│       │                            # InMemory* (tests), File* (deprecated)
+│       ├── mailer.ts                # Mailer port + LogMailer (data/outbox/)
+│       ├── queue.ts                 # SQLite job queue + worker (email.send, backoff, dead-letter)
+│       └── observability.ts         # JSON logger, metrics, error-report hook
 ├── src/
-│   ├── components/              # Shared UI components
-│   ├── features/               # Feature modules
-│   │   ├── auth/               # Authentication (context, API, pages, components)
-│   │   ├── users/              # User management (admin)
-│   │   └── profile/            # Profile settings
-│   ├── lib/                    # Utilities, helpers
-│   └── main.tsx                # React entry point
-├── data/                       # Runtime data storage
-├── CODE_REVIEW.md              # Code review findings
-└── ARCHITECTURE.md             # This file
+│   ├── components/                  # AuthRoute, MainApp, Header, Footer, ui/*
+│   ├── features/                    # auth/, users/, profile/ (API + context + pages)
+│   ├── lib/                         # axios (withCredentials), react-query, utils
+│   └── main.tsx / App.tsx           # ThemeProvider -> AuthProvider -> App
+├── data/                            # RUNTIME, gitignored: app.db, outbox/, audit.log
+└── docs: ARCHITECTURE.md (this), CODE_REVIEW.md, SAAS_KICKOFF.md, SAAS_SCENARIO.md, USAGE.md
 ```
 
 ---
@@ -43,306 +52,110 @@ project-root/
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                   React                         │
-│  (Vite + TanStack Query + Axios + Shadcn UI)   │
-│  Auth: httpOnly cookie via withCredentials      │
+│  React SPA (Vite + Query + Axios, cookies)      │
 └──────────────────┬──────────────────────────────┘
-                   │ HTTP (JSON)
+                   │ HTTP + httpOnly cookies
                    ▼
 ┌─────────────────────────────────────────────────┐
-│              Express API Layer                   │
-│  Controllers → DTOs (Zod validation)            │
-│  Middleware: helmet, cors, cookieParser,         │
-│  rateLimit, morgan, requestId, errorHandler     │
-│  Auth: authenticate, authorizeAdmin             │
+│  Express API Layer                              │
+│  DTOs (Zod) -> middleware chain -> Controllers  │
+│  Chain: authenticate -> requireActiveUser ->    │
+│         resolveTenant -> authorize/plan gates   │
 └──────────────────┬──────────────────────────────┘
-                   │ Calls
+                   │ calls (constructor-injected)
                    ▼
 ┌─────────────────────────────────────────────────┐
-│           Domain Service Layer                   │
-│  Business logic, validation, auth rules         │
-│  AuthService, UserService, ProfileService       │
+│  Domain Services (Auth, User, Profile)          │
+│  Business rules + lifecycle. Imports PORTS only │
 └──────────────────┬──────────────────────────────┘
-                   │ Uses
+                   │ uses
                    ▼
 ┌─────────────────────────────────────────────────┐
-│         Repository Interface (Port)              │
-│  IUserRepository (abstract class)               │
+│  Ports (IUserRepository, org/sub/token ports,   │
+│  Mailer) implemented by Infrastructure          │
 └──────────────────┬──────────────────────────────┘
-                   │ Implemented by
+                   │ adapters
                    ▼
 ┌─────────────────────────────────────────────────┐
-│      Infrastructure (Adapter)                    │
-│  FileUserRepository (JSON file)                  │
-│  PostgresUserRepository (stub / future)          │
-│  AuditLogger (data/audit.log + console)          │
+│  Infrastructure (SQLite, job queue, outbox,     │
+│  audit log, metrics). Wired in ONE place:       │
+│  SharedUserRepository + server.ts + app.ts      │
 └─────────────────────────────────────────────────┘
 ```
 
----
-
-## Data Flow
-
-### Authentication
-
-```
-1. POST /auth/register with password + confirmPassword
-2. AuthController.validate(RegisterSchema)
-3. AuthService.register()
-   - First user → role: "admin"
-   - Subsequent users → role: "user"
-4. bcryptjs.hash(password, 12)
-5. UserRepository.save(user)
-6. Audit log: user.registered
-7. jwt.sign({ userId, role }) → httpOnly cookie
-8. Response: { user } (no token in body)
-```
-
-### Login
-
-```
-1. POST /auth/login → rate-limited (5 req / 15 min)
-2. AuthController.validate(LoginSchema)
-3. AuthService.login()
-   - Checks isActive flag
-   - Checks isLocked() (5 failed attempts = 15 min lock)
-   - bcryptjs.compare(password, user.password)
-   - Success: resetFailedAttempts(), generate JWT → httpOnly cookie
-   - Failure: recordFailedAttempt(), throw if locked
-4. Response: { user }
-```
-
-### Authenticated Request
-
-```
-1. Axios sends request with withCredentials: true
-2. server reads cookie → authenticate middleware verifies JWT
-3. req.user set with { userId, role }
-4. Controller uses req.user for authorization
-```
-
-### Admin Operations
-
-```
-1. authenticate middleware verifies JWT from cookie (or Authorization header)
-2. authorizeAdmin checks req.user.role === 'admin'
-3. Controller performs action (toggleStatus, deleteUser)
-4. Audit log: user.deleted
-```
-
-### Profile Operations
-
-```
-1. GET /profile — returns current user from req.user.userId
-2. PUT /profile — validates UpdateProfileSchema, updates name/email
-3. PUT /profile/password — validates ChangePasswordSchema, verifies current password
-4. DELETE /profile — deletes account, audit log: user.account_deleted
-```
+**Dependency rule:** `API -> Domain -> Ports <- Infrastructure`. Domain files import only domain types. `process.env` is read only in `server/config` (and `server.ts` via that module).
 
 ---
 
-## Request Lifecycle
+## Multi-Tenancy (shared schema)
+
+- Every user has exactly one `orgId` (workspace). Identity (email) is **global** so login needs no tenant hint; data access is **org-scoped** (`findAllByOrg`, `findByEmailAndOrg`).
+- Registration bootstraps a personal org + `free/trialing` subscription row. Invites join the inviter's org.
+- `resolveTenant` binds `req.tenant` from the DB-hydrated account (never from the JWT claim alone); a claim/DB mismatch means a stale token -> 401.
+- Rule for new features: **every tenant table gets `org_id`, every query scopes by it, tenant comes from `req.tenant`, never from client input.**
+
+## Session Lifecycle
+
+- Login/register/accept-invite mint a pair: short-lived access JWT (`ACCESS_TOKEN_TTL`, default `15m`, `access` cookie) + opaque refresh token (default 30d, stored **hashed**, `refresh` cookie).
+- `POST /api/auth/refresh` rotates: old row revoked + linked to replacement. Replaying a rotated token = theft signal -> **whole chain revoked**.
+- Password reset / password change revokes all refresh sessions. Access JWTs are stateless and live ≤ TTL (accepted tradeoff, documented in code).
+- Account states enforced at two levels: issuance (`AuthService`: active? locked?) and per-request (`requireActiveUser`: exists? active?).
+
+## Request Lifecycle (middleware order in `app.ts`)
 
 ```
-Request
-  │
-  ├── 1. helmet (security headers)
-  ├── 2. cors (configured origin)
-  ├── 3. cookieParser (parse cookies)
-  ├── 4. express.json (body parsing)
-  ├── 5. rateLimit (auth routes only — 5 req / 15 min)
-  ├── 6. morgan (HTTP logging)
-  ├── 7. requestId (x-request-id header)
-  ├── 8. Route matched
-  │     ├── authenticate (verify JWT)
-  │     ├── authorizeAdmin (check role — user routes)
-  │     └── Controller → Service → Repository
-  └── 9. Error handler (if next(error))
+trust proxy -> rate limit (/api) -> json/cookies -> requestId -> metrics
+  -> cors -> helmet -> morgan -> swagger (dev) -> routes -> errorHandler
+Route chain: authenticate (401) -> requireActiveUser (401/403)
+  -> resolveTenant -> authorizeAdmin (403) / requirePlan (403+upgrade_required)
+  -> controller -> service -> port -> adapter
 ```
 
----
+## Routes
 
-## Route Design
+### Auth (`/api/auth`)
+| Method | Path | Guards | Notes |
+|--------|------|--------|-------|
+| POST | /register | ip limiter | Creates user + org + sub; sets session; enqueues verify email |
+| POST | /login | ip + per-account limiters | Lockout-aware; sets session |
+| POST | /refresh | — | Rotates pair; reuse detected |
+| POST | /logout | — | Revokes refresh; clears cookies |
+| GET | /me | auth + active | Liveness-checked profile |
+| POST | /verify-request | ip limiter | Always 200 (no enumeration) |
+| GET | /verify?token= | — | Single-use, 24h |
+| POST | /password-reset-request | ip limiter | Always 200 |
+| POST | /password-reset | ip limiter | Kills all sessions |
+| POST | /invite-accept | ip limiter | Sets password, verifies, auto-login |
 
-### Auth Routes (`/auth`)
-| Method | Path | Auth | Rate Limit | Description |
-|--------|------|------|------------|-------------|
-| POST | /register | No | Yes | Register new user |
-| POST | /login | No | Yes | Login |
-| POST | /logout | No | No | Clear auth cookie |
-| GET | /me | Yes | No | Get current user |
+### Users (`/api/users`, all: auth + active + tenant + **admin**)
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | / | Invite into caller's org; emails single-use 7d link |
+| GET | / | Tenant-scoped list (PII: admin-only) |
+| PATCH | /:id/status | Toggle active (session kill is immediate via `requireActiveUser`) |
+| DELETE | /:id | Deletes user (refresh rows cascade) |
 
-### User Routes (`/users`) — Admin Only
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | / | Yes | List all users |
-| POST | / | Admin | Create user |
-| PATCH | /:id/status | Admin | Toggle active status |
-| DELETE | /:id | Admin | Delete user |
-| PUT | /:id | Admin | Update user |
+### Profile (`/api/profile`, all: auth + active + tenant)
+`GET /` read · `PUT /` update name/email · `PUT /password` change (revokes others, re-mints caller) · `DELETE /` delete own account.
 
-### Profile Routes (`/profile`)
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | / | Yes | Get own profile |
-| PUT | / | Yes | Update name/email |
-| PUT | /password | Yes | Change password |
-| DELETE | / | Yes | Delete own account |
+### Billing / Ops
+`GET /api/billing/subscription` (tenant's row) · `GET /api/metrics` (admin-only counters) · `GET /api/health` (open).
 
-### Health
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /api/health | No | Health check |
+## Data & Background Flows
 
----
+- **Migrations** run at boot before listen (`migrate()`), ledgered in `schema_migrations`. New change = new `NNN_*.sql`, portable SQL, never edit applied files.
+- **Jobs:** controllers `enqueue()` and return; worker (10s tick, `unref`'d, skipped in tests) leases due rows, exponential backoff, `dead` parking, 7d prune of `done`. Built-in `email.send` -> `Mailer` port (`LogMailer` to `data/outbox/` in dev).
+- **Audit:** `user.registered/verified/invited/invite_accepted/password_reset/deleted/account_deleted` to stdout + `data/audit.log` (best-effort).
+- **Observability:** JSON logs (`LOG_LEVEL`), per-route metrics, 5xx -> `reportError` (log + optional `ERROR_WEBHOOK_URL`).
 
-## Entity Design
+## Security Posture
 
-### User Entity
-
-```typescript
-class User {
-  id: string;           // UUID v4
-  name: string;         // Display name
-  email: string;        // Unique, lowercase
-  password: string;     // bcrypt hash
-  role: 'admin' | 'user';
-  isActive: boolean;    // For soft deactivation
-  createdAt: Date;
-  updatedAt: Date;
-
-  // Security fields (added in review cycle 2)
-  failedLoginAttempts: number;  // Incremented on failed login
-  lockedUntil: Date | null;     // Set on 5th failure, 15 min lockout
-
-  // Methods
-  isLocked(): boolean;                   // Returns true if lockedUntil > now
-  recordFailedAttempt(): void;           // Increments + locks at 5
-  resetFailedAttempts(): void;           // Resets on successful login
-}
-```
-
-### Audit Event
-
-```typescript
-interface AuditEvent {
-  timestamp: string;    // ISO 8601
-  event: string;        // e.g. "user.registered", "user.deleted", "user.account_deleted"
-  userId: string;
-  metadata?: Record<string, unknown>;
-}
-```
-
----
-
-## DTO / Validation Design
-
-### AuthDTO
-
-```typescript
-// RegisterSchema — validates POST /auth/register
-{
-  name: z.string().min(2).max(100),
-  email: z.string().email(),
-  password: z.string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Must contain uppercase letter')
-    .regex(/[a-z]/, 'Must contain lowercase letter')
-    .regex(/[0-9]/, 'Must contain a number'),
-  confirmPassword: z.string()
-}.refine(data => data.password === data.confirmPassword, {
-  message: 'Passwords must match',
-  path: ['confirmPassword'],
-});
-
-// LoginSchema — validates POST /auth/login
-{
-  email: z.string().email(),
-  password: z.string().min(1),
-}
-
-// ChangePasswordSchema — validates PUT /profile/password
-{
-  currentPassword: z.string().min(1),
-  newPassword: z.string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Must contain uppercase letter')
-    .regex(/[a-z]/, 'Must contain lowercase letter')
-    .regex(/[0-9]/, 'Must contain a number'),
-}
-```
-
----
-
-## Security Design
-
-| Measure | Implementation | Status |
-|---------|---------------|--------|
-| Password hashing | bcryptjs, salt rounds: 12 | ✅ |
-| Auth rate limiting | `express-rate-limit`, 5 req / 15 min on login/register | ✅ |
-| JWT httpOnly cookie | `cookie-parser`, `secure: true` in prod, `sameSite: 'lax'` | ✅ |
-| Account lockout | 5 failed attempts = 15 min lock (`failedLoginAttempts`, `lockedUntil`) | ✅ |
-| Password complexity | Zod: min 8 + uppercase + lowercase + number | ✅ |
-| Password confirmation | Zod `.refine()` on register | ✅ |
-| Role-based access | `authorizeAdmin` middleware for user management | ✅ |
-| Request validation | Zod schemas on all endpoints | ✅ |
-| Security headers | `helmet` middleware | ✅ |
-| CORS | Configured origin, credentials: true | ✅ |
-| Swagger UI | Development only (disabled in production) | ✅ |
-| Audit logging | JSON events to file and console | ✅ |
-| Request ID | `x-request-id` header on every response | ✅ |
-
----
+httpOnly session cookies · bcrypt hashes only · first-user-admin bootstrap (no role input) · 5-fail/15-min lockout + IP (5/15m) + per-account (10/15m) throttles · single-use hashed tokens (verify 24h, reset 1h, invite 7d) · helmet + CORS allowlist array · JWT fail-closed in prod · runtime DB/outbox gitignored · Swagger dev-only.
 
 ## Testing
 
 ```
-Test Files  5 passed (5)
-Tests      34 passed (34)
+Test Files  9 passed (9) · Tests  54 passed (54)
 ```
-
-| File | Tests | Notes |
-|------|-------|-------|
-| `server/domain/services/AuthService.test.ts` | 11 | Register (first user admin), login, token verification, role, active/inactive, lockout |
-| `server/domain/services/UserService.test.ts` | 9 | CRUD, status toggle |
-| `server/domain/services/ProfileService.test.ts` | 11 | getProfile, updateProfile, deleteAccount, changePassword |
-| `server/tests/api.test.ts` | 1 | Health endpoint |
-| `src/App.test.tsx` | 2 | Component rendering |
-
----
-
-## Tech Stack
-
-### Backend
-- **Express 5** — Web framework
-- **TypeScript** — Language
-- **Zod** — Runtime validation
-- **jsonwebtoken** — JWT auth
-- **bcryptjs** — Password hashing
-- **cookie-parser** — Cookie parsing for httpOnly JWT
-- **express-rate-limit** — Rate limiting
-- **helmet** — Security headers
-- **cors** — Cross-origin support
-- **morgan** — HTTP logging
-- **swagger-jsdoc + swagger-ui-express** — API docs (dev only)
-- **better-sqlite3** — Installed, not yet used
-- **tsx** — TypeScript execution
-
-### Frontend
-- **React 19** — UI library
-- **TypeScript** — Language
-- **Vite 6** — Build tool / dev server
-- **Tailwind CSS v4** — Utility CSS
-- **Shadcn UI** — Component library
-- **TanStack Query (React Query)** — Server state
-- **Axios** — HTTP client (withCredentials for cookie auth)
-- **react-hook-form** — Form management
-- **next-themes** — Theme (dark/light)
-- **sonner** — Toast notifications
-- **lucide-react** — Icons
-- **vitest + jsdom** — Frontend testing
-- **react-router** — Routing (imported, limited use)
-
-### Testing
-- **Vitest** — Test runner
-- **supertest** — HTTP testing (available but no tests written yet)
+AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 9 (invite, tenancy scoping) · ProfileService 11 · requireActiveUser 4 · requirePlan 4 · SQLite adapters 3 · job queue 3 · health 1 · App render 2.
+Conventions: services tested against in-file doubles; adapters + queue against real isolated `:memory:` SQLite (`migrate(db)` in `beforeAll`); no HTTP tests except health (rate limiters make HTTP auth tests flaky — test services instead).

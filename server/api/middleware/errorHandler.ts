@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../../domain/exceptions/AppError';
 import { ValidationException } from '../../domain/exceptions/ValidationException';
 import { StatusCodes } from 'http-status-codes';
+import { reportError } from '../../infrastructure/observability';
 
 export const errorHandler = (
   err: Error,
@@ -21,6 +22,7 @@ export const errorHandler = (
   }
 
   if (err instanceof AppError) {
+    // Operational (4xx) errors are expected client faults — logged, not paged.
     res.status(err.statusCode).json({
       error: err.name,
       message: err.message,
@@ -28,7 +30,9 @@ export const errorHandler = (
     return;
   }
 
-  // fallback
+  // Unexpected 5xx: structured report (log + optional webhook/Sentry-style
+  // ingest) with request context, generic body to the client (no leak).
+  reportError(err, { url: _req.url, method: _req.method, requestId: (_req as any).requestId });
   res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',

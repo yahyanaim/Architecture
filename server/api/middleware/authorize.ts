@@ -2,7 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from './authenticate';
 
 /**
- * Middleware to check if the authenticated user has admin role
+ * Role gate (what may they do?). Must run AFTER `authenticate` (identity)
+ * and `requireActiveUser` (liveness): it trusts `req.user.role`, so placing
+ * it earlier would authorize stale/deleted accounts. Responds 403 directly —
+ * a forbidden known identity is not an exception, it is the expected answer.
  */
 export const authorizeAdmin = (req: Request, res: Response, next: NextFunction): void => {
   const authReq = req as unknown as AuthRequest;

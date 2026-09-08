@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '../../domain/services/UserService';
-import { userRepository } from '../../infrastructure/repositories/SharedUserRepository';
+import { userRepository, tokenStore, jobQueue } from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
+import { createRequireActiveUser } from '../middleware/requireActiveUser';
+import { resolveTenant } from '../middleware/resolveTenant';
 import { authorizeAdmin } from '../middleware/authorize';
 
 const router = Router();
@@ -16,15 +18,26 @@ const router = Router();
 
 // 2. Instantiate the Service (Domain Layer)
 // Injecting the repository via constructor
-const userService = new UserService(userRepository);
+const userService = new UserService(userRepository, tokenStore);
+
+// 2b. Session-liveness guard. `authenticate` verifies the JWT signature only;
+// `requireActiveUser` re-checks the account against the repository on every
+// request so deactivated/deleted users lose access immediately instead of
+// keeping a valid token until expiry. Injected with the same singleton.
+const requireActiveUser = createRequireActiveUser(userRepository);
 
 // 3. Instantiate the Controller (API Layer)
-// Injecting the service via constructor
-const userController = new UserController(userService);
+// Injecting the service + job queue (invite emails) via constructor
+const userController = new UserController(userService, jobQueue);
 
 // ==========================================
 // Route Definitions
-// All user management routes require authentication
+// POLICY: user management is admin-only. Every route here chains
+// `authenticate` (who is calling?) -> `requireActiveUser` (is the account
+// still live?) -> `resolveTenant` (which workspace?) -> `authorizeAdmin`
+// (is it an admin?) before the controller. `GET /` intentionally requires
+// admin too: the payload contains every account's name/email/role, which is
+// PII enumeration for regular users. All data access below is org-scoped.
 // ==========================================
 
 /**
@@ -59,7 +72,7 @@ const userController = new UserController(userService);
  *       403:
  *         description: 'Forbidden: Admin access required'
  */
-router.post('/', authenticate, authorizeAdmin, userController.createUser);
+router.post('/', authenticate, requireActiveUser, resolveTenant, authorizeAdmin, userController.createUser);
 
 /**
  * @swagger
@@ -75,7 +88,7 @@ router.post('/', authenticate, authorizeAdmin, userController.createUser);
  *       401:
  *         description: Unauthorized
  */
-router.get('/', authenticate, userController.getAllUsers);
+router.get('/', authenticate, requireActiveUser, resolveTenant, authorizeAdmin, userController.getAllUsers);
 
 /**
  * @swagger
@@ -99,7 +112,7 @@ router.get('/', authenticate, userController.getAllUsers);
  *       401:
  *         description: Unauthorized
  */
-router.patch('/:id/status', authenticate, authorizeAdmin, userController.toggleStatus);
+router.patch('/:id/status', authenticate, requireActiveUser, resolveTenant, authorizeAdmin, userController.toggleStatus);
 
 /**
  * @swagger
@@ -123,7 +136,7 @@ router.patch('/:id/status', authenticate, authorizeAdmin, userController.toggleS
  *       401:
  *         description: Unauthorized
  */
-router.delete('/:id', authenticate, authorizeAdmin, userController.deleteUser);
+router.delete('/:id', authenticate, requireActiveUser, resolveTenant, authorizeAdmin, userController.deleteUser);
 
 export { router as userRoutes };
 

@@ -1,4 +1,5 @@
 import { IUserRepository } from '../interfaces/IUserRepository';
+import { ITokenStore } from '../interfaces/ITenant';
 import { User } from '../entities/User';
 import { NotFoundException } from '../exceptions/NotFoundException';
 import { BusinessException } from '../exceptions/BusinessException';
@@ -9,7 +10,10 @@ export interface UpdateProfileInput {
 }
 
 export class ProfileService {
-  constructor(private readonly userRepository: IUserRepository) { }
+  // `tokenStore` is optional for backward compatibility (tests construct with
+  // repo only). In the app it is ALWAYS wired: a password change must kill
+  // all other sessions (see changePassword).
+  constructor(private readonly userRepository: IUserRepository, private readonly tokenStore?: ITokenStore) { }
 
   async getProfile(userId: string): Promise<User> {
     const user = await this.userRepository.findById(userId);
@@ -62,5 +66,11 @@ export class ProfileService {
 
     user.password = await User.hashPassword(newPassword);
     await this.userRepository.save(user);
+    // Credential change = session kill: every OTHER device/session dies with
+    // the old password (the caller's session is refreshed by the controller
+    // issuing a new pair — see ProfileController.changePassword).
+    if (this.tokenStore) {
+      await this.tokenStore.revokeAllForUser(userId);
+    }
   }
 }
