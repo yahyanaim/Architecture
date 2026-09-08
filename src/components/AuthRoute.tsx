@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { MainApp } from '@/components/MainApp';
 import { LoginPage } from '@/features/auth/pages/LoginPage';
 import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { ProfileSettings } from '@/features/profile/pages/ProfileSettings';
+import { PricingPage } from '@/features/billing/pages/PricingPage';
+import { BillingSettings } from '@/features/billing/pages/BillingSettings';
+import { UPGRADE_REQUIRED_EVENT } from '@/lib/axios';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
 
-type Page = 'main' | 'profile' | 'register';
+type Page = 'main' | 'profile' | 'register' | 'pricing' | 'billing';
 
 function ProfilePage({ onBack }: { onBack: () => void }) {
   return (
@@ -24,6 +27,14 @@ function ProfilePage({ onBack }: { onBack: () => void }) {
 export function AuthRoute() {
   const { user, isLoading } = useAuth();
   const [currentPage, setCurrentPage] = useState<Page>('main');
+
+  // Global plan-gate handler: any API 403 with code 'upgrade_required'
+  // (dispatched by the axios interceptor) routes here instead of a toast.
+  useEffect(() => {
+    const goPricing = () => setCurrentPage('pricing');
+    window.addEventListener(UPGRADE_REQUIRED_EVENT, goPricing);
+    return () => window.removeEventListener(UPGRADE_REQUIRED_EVENT, goPricing);
+  }, []);
 
   const handleNavigate = (page: Page) => {
     setCurrentPage(page);
@@ -46,6 +57,19 @@ export function AuthRoute() {
 
   if (currentPage === 'profile') {
     return <ProfilePage onBack={() => setCurrentPage('main')} />;
+  }
+
+  if (currentPage === 'pricing') {
+    return <PricingPage onBack={() => setCurrentPage('main')} />;
+  }
+
+  if (currentPage === 'billing') {
+    return (
+      <BillingSettings
+        onBack={() => setCurrentPage('main')}
+        onNavigateToPricing={() => setCurrentPage('pricing')}
+      />
+    );
   }
 
   return <MainApp onNavigate={handleNavigate} />;

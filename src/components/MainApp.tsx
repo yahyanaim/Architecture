@@ -7,7 +7,7 @@ import { Footer } from '@/components/Footer';
 import { UserList } from '@/features/users/components/UserList';
 import { CreateUserForm } from '@/features/users/components/CreateUserForm';
 
-type Page = 'main' | 'profile';
+type Page = 'main' | 'profile' | 'pricing' | 'billing';
 
 interface MainAppProps {
   onNavigate?: (page: Page) => void;

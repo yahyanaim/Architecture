@@ -1,7 +1,7 @@
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings, CreditCard } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 
-type Page = 'main' | 'profile';
+type Page = 'main' | 'profile' | 'pricing' | 'billing';
 
 interface HeaderProps {
   onNavigate?: (page: Page) => void;
@@ -16,6 +16,10 @@ export function Header({ onNavigate }: HeaderProps) {
 
   const goToProfile = () => {
     onNavigate?.('profile');
+  };
+
+  const goToBilling = () => {
+    onNavigate?.('billing');
   };
 
   return (
@@ -40,6 +44,13 @@ export function Header({ onNavigate }: HeaderProps) {
           >
             <Settings className="w-4 h-4" />
             Settings
+          </button>
+          <button
+            onClick={goToBilling}
+            className="flex items-center gap-2 text-gray-600 hover:text-black transition-colors text-sm cursor-pointer"
+          >
+            <CreditCard className="w-4 h-4" />
+            Billing
           </button>
           <button
             onClick={logout}

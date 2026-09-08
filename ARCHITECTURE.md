@@ -159,7 +159,7 @@ httpOnly session cookies · bcrypt hashes only · first-user-admin bootstrap (no
 ## Testing
 
 ```
-Test Files  12 passed (12) · Tests  73 passed (73)
+Test Files  13 passed (13) · Tests  75 passed (75)
 ```
-AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 11 (invite, tenancy scoping, cross-org guards) · ProfileService 11 · BillingService 7 (checkout/dunning/idempotency) · billing client 6 (HMAC, price map) · requireActiveUser 4 · requirePlan 5 (incl. dunning grace) · tenancy guard 2 · SQLite adapters 4 (incl. webhook ledger) · job queue 3 · health 1 · App render 2.
+AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 11 (invite, tenancy scoping, cross-org guards) · ProfileService 11 · BillingService 7 (checkout/dunning/idempotency) · billing client 6 (HMAC, price map) · billing UI predicate 2 (upgrade_required routing) · requireActiveUser 4 · requirePlan 5 (incl. dunning grace) · tenancy guard 2 · SQLite adapters 4 (incl. webhook ledger) · job queue 3 · health 1 · App render 2.
 Conventions: services tested against in-file doubles; adapters + queue against real isolated `:memory:` SQLite (`migrate(db)` in `beforeAll`); architecture tripwire `server/tenancy-guard.test.ts` (SQL org-scope + route-chain order, closed-by-default for new route files); no HTTP tests except health (rate limiters make HTTP auth tests flaky — test services instead).
