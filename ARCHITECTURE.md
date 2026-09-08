@@ -4,7 +4,7 @@
 **Tech Stack:** React 19, Express 4, TypeScript, Vite, Tailwind CSS v4, Shadcn UI, TanStack Query, Zod, SQLite (better-sqlite3), Vitest
 **Architecture Pattern:** Clean Architecture + Hexagonal (Ports and Adapters), shared-schema multi-tenancy
 
-> Last verified: 84 tests passing (15 files), `npm run lint` clean. If code and this doc disagree, the code wins — then fix the doc.
+> Last verified: 92 tests passing (16 files), `npm run lint` clean. If code and this doc disagree, the code wins — then fix the doc.
 
 ---
 
@@ -160,7 +160,7 @@ httpOnly session cookies · bcrypt hashes only · first-user-admin bootstrap (no
 ## Testing
 
 ```
-Test Files  15 passed (15) · Tests  84 passed (84)
+Test Files  16 passed (16) · Tests  92 passed (92)
 ```
-AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 11 (invite, tenancy scoping, cross-org guards) · ProfileService 11 · BillingService 7 (checkout/dunning/idempotency) · billing client 6 (HMAC, price map) · billing UI predicate 2 (upgrade_required routing) · password contract 3 + auth forms 3 · requireActiveUser 4 · requirePlan 5 (incl. dunning grace) · tenancy guard 2 · SQLite adapters 4 (incl. webhook ledger) · job queue 3 · health 1 · App render 2 + router guards 3.
+AuthService 17 · UserService 15 (self-actions/sole-admin guards, invite, tenancy scoping, cross-org guards) · ProfileService 12 (verification reset on email change, sole admin delete guard) · BillingService 7 (org plan sync, checkout/dunning/idempotency) · billing client 6 (HMAC, price map) · billing UI predicate 2 · password contract 3 + auth forms 3 · requireActiveUser 4 · requirePlan 5 (incl. dunning grace) · tenancy guard 2 · SQLite adapters 4 · job queue 4 (incl. zombie recovery) · axios interceptors 2 · health 1 · App render 2 + router guards 3.
 Conventions: services tested against in-file doubles; adapters + queue against real isolated `:memory:` SQLite (`migrate(db)` in `beforeAll`); architecture tripwire `server/tenancy-guard.test.ts` (SQL org-scope + route-chain order, closed-by-default for new route files); no HTTP tests except health (rate limiters make HTTP auth tests flaky — test services instead).

@@ -64,6 +64,13 @@ export class BillingService {
     if (input.customerId) sub.customerRef = input.customerId;
     sub.graceUntil = null;
     await this.touch(sub);
+
+    const org = await this.orgs.findById(input.orgId);
+    if (org) {
+      org.plan = input.plan;
+      await this.orgs.save(org);
+    }
+
     return sub;
   }
 
@@ -76,7 +83,14 @@ export class BillingService {
     sub.status = mapped.status;
     sub.graceUntil = mapped.grace ? new Date(Date.now() + DUNNING_GRACE_MS) : null;
     // Unknown price ids NEVER downgrade/upgrade blindly — keep current plan.
-    if (input.pricePlan) sub.plan = input.pricePlan;
+    if (input.pricePlan) {
+      sub.plan = input.pricePlan;
+      const org = await this.orgs.findById(sub.orgId);
+      if (org) {
+        org.plan = input.pricePlan;
+        await this.orgs.save(org);
+      }
+    }
     await this.touch(sub);
     return sub;
   }
@@ -87,6 +101,13 @@ export class BillingService {
     sub.status = 'canceled';
     sub.graceUntil = null;
     await this.touch(sub);
+
+    const org = await this.orgs.findById(sub.orgId);
+    if (org) {
+      org.plan = 'free';
+      await this.orgs.save(org);
+    }
+
     return sub;
   }
 

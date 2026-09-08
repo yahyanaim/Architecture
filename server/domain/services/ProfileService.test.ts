@@ -37,9 +37,15 @@ describe('ProfileService', () => {
       expect(updated.name).toBe('New Name');
     });
 
-    it('updates the user email', async () => {
+    it('updates the user email and resets emailVerifiedAt', async () => {
+      testUser.markVerified();
+      await userRepository.save(testUser);
+      expect(testUser.isVerified).toBe(true);
+
       const updated = await profileService.updateProfile(testUser.id, { email: 'new@test.com' });
       expect(updated.email).toBe('new@test.com');
+      expect(updated.isVerified).toBe(false);
+      expect(updated.emailVerifiedAt).toBeNull();
     });
 
     it('throws BusinessException when email is already in use', async () => {
@@ -58,8 +64,19 @@ describe('ProfileService', () => {
   describe('deleteAccount', () => {
     it('deletes the user', async () => {
       await profileService.deleteAccount(testUser.id);
-      const user = await userRepository.findById(testUser.id);
-      expect(user).toBeNull();
+      expect(await userRepository.findById(testUser.id)).toBeNull();
+    });
+
+    it('refuses to delete sole admin if other members exist in the org', async () => {
+      testUser.role = 'admin';
+      await userRepository.save(testUser);
+
+      const member = await User.create('Member', 'member@test.com', 'Password1', 'user');
+      member.orgId = testUser.orgId;
+      await userRepository.save(member);
+
+      await expect(profileService.deleteAccount(testUser.id))
+        .rejects.toThrow('Cannot delete account: you are the sole admin of this workspace');
     });
 
     it('throws NotFoundException when user does not exist', async () => {

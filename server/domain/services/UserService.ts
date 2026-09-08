@@ -52,10 +52,22 @@ export class UserService {
   // in the caller's org. Missing OR foreign both answer 404 — a 403 would
   // confirm the account exists in another tenant (existence oracle). Without
   // this, an admin in org A could toggle/delete users in org B by UUID.
-  async toggleUserStatus(id: string, orgId: string): Promise<User> {
+  async toggleUserStatus(id: string, orgId: string, actorId?: string): Promise<User> {
     const user = await this.userRepository.findById(id);
     if (!user || user.orgId !== orgId) {
       throw new NotFoundException('User not found');
+    }
+
+    if (actorId && actorId === id) {
+      throw new BusinessException('Cannot deactivate your own account');
+    }
+
+    if (user.role === 'admin' && user.isActive) {
+      const orgUsers = await this.userRepository.findAllByOrg(orgId);
+      const activeAdmins = orgUsers.filter((u) => u.role === 'admin' && u.isActive && u.id !== id);
+      if (activeAdmins.length === 0) {
+        throw new BusinessException('Cannot deactivate the sole admin of the workspace');
+      }
     }
 
     user.toggleActiveStatus();
@@ -63,11 +75,24 @@ export class UserService {
     return user;
   }
 
-  async deleteUser(id: string, orgId: string): Promise<void> {
+  async deleteUser(id: string, orgId: string, actorId?: string): Promise<void> {
     const user = await this.userRepository.findById(id);
     if (!user || user.orgId !== orgId) {
       throw new NotFoundException('User not found');
     }
+
+    if (actorId && actorId === id) {
+      throw new BusinessException('Cannot delete your own account via user management');
+    }
+
+    if (user.role === 'admin') {
+      const orgUsers = await this.userRepository.findAllByOrg(orgId);
+      const otherAdmins = orgUsers.filter((u) => u.role === 'admin' && u.isActive && u.id !== id);
+      if (otherAdmins.length === 0) {
+        throw new BusinessException('Cannot delete the sole admin of the workspace');
+      }
+    }
+
     await this.userRepository.delete(id);
   }
 

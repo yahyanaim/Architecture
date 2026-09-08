@@ -1,17 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthRequest } from './authenticate';
+import { ActiveUserRequest } from './requireActiveUser';
 
 /**
  * Role gate (what may they do?). Must run AFTER `authenticate` (identity)
- * and `requireActiveUser` (liveness): it trusts `req.user.role`, so placing
- * it earlier would authorize stale/deleted accounts. Responds 403 directly —
- * a forbidden known identity is not an exception, it is the expected answer.
+ * and `requireActiveUser` (liveness): evaluates the fresh DB-hydrated role
+ * (`req.account.role`), falling back to the JWT claim (`req.user.role`).
+ * This closes the window where a demoted admin retains admin access.
  */
 export const authorizeAdmin = (req: Request, res: Response, next: NextFunction): void => {
-  const authReq = req as unknown as AuthRequest;
+  const authReq = req as ActiveUserRequest;
   
-  // Check if user is authenticated and has admin role
-  if (!authReq.user || authReq.user.role !== 'admin') {
+  const role = authReq.account?.role ?? authReq.user?.role;
+  if (!role || role !== 'admin') {
     res.status(403).json({ message: 'Forbidden: Admin access required' });
     return;
   }

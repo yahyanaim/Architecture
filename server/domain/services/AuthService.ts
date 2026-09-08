@@ -1,5 +1,3 @@
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import { IUserRepository } from '../interfaces/IUserRepository';
 import {
   IOrganizationRepository, ISubscriptionRepository, ITokenStore, AuthTokenType,
@@ -9,8 +7,10 @@ import { Organization } from '../entities/Organization';
 import { Subscription } from '../entities/Subscription';
 import { BusinessException } from '../exceptions/BusinessException';
 import { NotFoundException } from '../exceptions/NotFoundException';
+import { ITokenService } from '../interfaces/ITokenService';
+import { defaultTokenService, JwtTokenService } from '../../infrastructure/security/JwtTokenService';
 import {
-  JWT_SECRET, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS,
+  ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS,
 } from '../../config/index';
 
 export interface AuthPayload {
@@ -33,19 +33,6 @@ export interface LoginResult {
   tokens: SessionTokens;
 }
 
-function sha256(s: string): string {
-  return crypto.createHash('sha256').update(s).digest('hex');
-}
-
-function randomToken(bytes = 32): string {
-  return crypto.randomBytes(bytes).toString('base64url');
-}
-
-function slugify(base: string): string {
-  const clean = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'workspace';
-  return `${clean}-${crypto.randomBytes(3).toString('hex')}`;
-}
-
 /** Parses '15m'/'2h'/'7d'/'30s' into ms for cookie maxAge. */
 export function parseTtlMs(ttl: string, fallbackMs: number): number {
   const m = /^(\d+)(s|m|h|d)$/.exec(ttl.trim());
@@ -66,17 +53,22 @@ export const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_DAYS * 86_400_000;
  * API layer to enqueue; the service never sends mail itself.
  */
 export class AuthService {
-  private readonly jwtSecret: string;
+  private readonly tokenService: ITokenService;
 
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly orgRepository: IOrganizationRepository,
     private readonly subscriptionRepository: ISubscriptionRepository,
     private readonly tokenStore: ITokenStore,
-    jwtSecret?: string
+    jwtSecretOrTokenService?: string | ITokenService
   ) {
-    const secret = jwtSecret ?? JWT_SECRET;
-    this.jwtSecret = secret;
+    if (typeof jwtSecretOrTokenService === 'string') {
+      this.tokenService = new JwtTokenService(jwtSecretOrTokenService);
+    } else if (jwtSecretOrTokenService) {
+      this.tokenService = jwtSecretOrTokenService;
+    } else {
+      this.tokenService = defaultTokenService;
+    }
   }
 
   // -- registration -------------------------------------------------------
@@ -97,7 +89,7 @@ export class AuthService {
     const hasUsers = await this.userRepository.hasUsers();
     const role: UserRole = !hasUsers ? 'admin' : 'user';
 
-    const org = new Organization(crypto.randomUUID(), `${name}'s workspace`, slugify(name));
+    const org = new Organization(globalThis.crypto.randomUUID(), `${name}'s workspace`, this.tokenService.slugify(name));
     await this.orgRepository.save(org);
     await this.subscriptionRepository.save(new Subscription(org.id, 'free', 'trialing'));
 
@@ -152,7 +144,7 @@ export class AuthService {
   // replacement. Presenting an already-revoked token means it was stolen
   // (the legitimate client moved on) -> revoke the WHOLE chain immediately.
   async refreshSession(refreshToken: string, ip?: string): Promise<LoginResult> {
-    const row = await this.tokenStore.findRefreshByHash(sha256(refreshToken));
+    const row = await this.tokenStore.findRefreshByHash(this.tokenService.hashToken(refreshToken));
     if (!row) throw new BusinessException('Invalid session');
     if (row.expiresAt.getTime() < Date.now()) throw new BusinessException('Session expired');
 
@@ -170,7 +162,7 @@ export class AuthService {
     if (!user.isActive) throw new BusinessException('Account is disabled');
 
     const tokens = await this.issueSession(user.id, user, ip);
-    const next = await this.tokenStore.findRefreshByHash(sha256(tokens.refresh));
+    const next = await this.tokenStore.findRefreshByHash(this.tokenService.hashToken(tokens.refresh));
     await this.tokenStore.revokeRefresh(row.id, next?.id ?? null);
 
     const org = await this.ensureOrg(user);
@@ -180,7 +172,7 @@ export class AuthService {
   /** Idempotent: revoking an unknown/absent token still succeeds. */
   async logout(refreshToken?: string): Promise<void> {
     if (!refreshToken) return;
-    const row = await this.tokenStore.findRefreshByHash(sha256(refreshToken));
+    const row = await this.tokenStore.findRefreshByHash(this.tokenService.hashToken(refreshToken));
     if (row && !row.revokedAt) await this.tokenStore.revokeRefresh(row.id);
   }
 
@@ -199,7 +191,7 @@ export class AuthService {
   }
 
   async verifyEmail(token: string): Promise<User> {
-    const row = await this.tokenStore.consumeAuthToken(sha256(token), 'verify');
+    const row = await this.tokenStore.consumeAuthToken(this.tokenService.hashToken(token), 'verify');
     if (!row || !row.userId) throw new BusinessException('Invalid or expired verification link');
     const user = await this.userRepository.findById(row.userId);
     if (!user) throw new NotFoundException('User not found');
@@ -218,7 +210,7 @@ export class AuthService {
   // CREDENTIAL CHANGE = session kill: all refresh tokens die with the old
   // password, and the lockout counter resets (owner proved email ownership).
   async resetPassword(token: string, newPassword: string): Promise<User> {
-    const row = await this.tokenStore.consumeAuthToken(sha256(token), 'reset');
+    const row = await this.tokenStore.consumeAuthToken(this.tokenService.hashToken(token), 'reset');
     if (!row || !row.userId) throw new BusinessException('Invalid or expired reset link');
     const user = await this.userRepository.findById(row.userId);
     if (!user) throw new NotFoundException('User not found');
@@ -241,7 +233,7 @@ export class AuthService {
     const org = await this.orgRepository.findById(orgId);
     if (!org) throw new NotFoundException('Organization not found');
 
-    const user = await User.create(name, email, randomToken(24), 'user');
+    const user = await User.create(name, email, this.tokenService.generateRandomToken(24), 'user');
     user.orgId = orgId;
     await this.userRepository.save(user);
     const inviteToken = await this.mintAuthToken(user.id, 'invite', 7 * 86_400_000, { orgId, email });
@@ -249,7 +241,7 @@ export class AuthService {
   }
 
   async acceptInvite(token: string, password: string, name?: string): Promise<LoginResult> {
-    const row = await this.tokenStore.consumeAuthToken(sha256(token), 'invite');
+    const row = await this.tokenStore.consumeAuthToken(this.tokenService.hashToken(token), 'invite');
     if (!row || !row.userId) throw new BusinessException('Invalid or expired invite link');
     const user = await this.userRepository.findById(row.userId);
     if (!user) throw new NotFoundException('User not found');
@@ -268,11 +260,11 @@ export class AuthService {
     const account = user ?? (await this.userRepository.findById(userId));
     if (!account) throw new NotFoundException('User not found');
     const payload = { userId: account.id, email: account.email, role: account.role, orgId: account.orgId };
-    const access = jwt.sign(payload, this.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL as jwt.SignOptions['expiresIn'] });
-    const refresh = randomToken();
+    const access = this.tokenService.signAccessToken(payload);
+    const refresh = this.tokenService.generateRandomToken();
     await this.tokenStore.createRefresh({
       userId: account.id,
-      tokenHash: sha256(refresh),
+      tokenHash: this.tokenService.hashToken(refresh),
       expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 86_400_000),
       ip,
     });
@@ -282,7 +274,7 @@ export class AuthService {
   /** Verifies a short-lived ACCESS token (used by middleware + tests). */
   verifyToken(token: string): AuthPayload {
     try {
-      const payload = jwt.verify(token, this.jwtSecret) as AuthPayload;
+      const payload = this.tokenService.verifyAccessToken(token);
       return payload;
     } catch {
       throw new BusinessException('Invalid or expired token');
@@ -295,9 +287,9 @@ export class AuthService {
 
   // -- internals ---------------------------------------------------------------
   private async mintAuthToken(userId: string | null, type: AuthTokenType, ttlMs: number, meta: Record<string, unknown>): Promise<string> {
-    const token = randomToken();
+    const token = this.tokenService.generateRandomToken();
     await this.tokenStore.createAuthToken({
-      userId, type, tokenHash: sha256(token), expiresAt: new Date(Date.now() + ttlMs), meta,
+      userId, type, tokenHash: this.tokenService.hashToken(token), expiresAt: new Date(Date.now() + ttlMs), meta,
     });
     return token;
   }
@@ -306,7 +298,7 @@ export class AuthService {
   private async ensureOrg(user: User): Promise<Organization> {
     const existing = await this.orgRepository.findById(user.orgId);
     if (existing) return existing;
-    const org = new Organization(crypto.randomUUID(), `${user.name}'s workspace`, slugify(user.name));
+    const org = new Organization(globalThis.crypto.randomUUID(), `${user.name}'s workspace`, this.tokenService.slugify(user.name));
     await this.orgRepository.save(org);
     await this.subscriptionRepository.save(new Subscription(org.id, 'free', 'trialing'));
     user.orgId = org.id;

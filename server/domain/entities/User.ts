@@ -1,5 +1,5 @@
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
+import { IPasswordHasher } from '../interfaces/IPasswordHasher';
+import { defaultPasswordHasher } from '../../infrastructure/security/BcryptPasswordHasher';
 
 export type UserRole = 'admin' | 'user';
 
@@ -36,9 +36,16 @@ export class User {
     }
   }
 
-  static async create(name: string, email: string, password: string, role: UserRole = 'user'): Promise<User> {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    return new User(crypto.randomUUID(), name, email, hashedPassword, new Date(), true, role);
+  static async create(
+    name: string,
+    email: string,
+    password: string,
+    role: UserRole = 'user',
+    hasher: IPasswordHasher = defaultPasswordHasher
+  ): Promise<User> {
+    const hashedPassword = await hasher.hash(password);
+    const id = globalThis.crypto.randomUUID();
+    return new User(id, name, email, hashedPassword, new Date(), true, role);
   }
 
   get isVerified(): boolean {
@@ -49,12 +56,12 @@ export class User {
     this.emailVerifiedAt = new Date();
   }
 
-  static async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+  static async hashPassword(password: string, hasher: IPasswordHasher = defaultPasswordHasher): Promise<string> {
+    return hasher.hash(password);
   }
 
-  async comparePassword(password: string): Promise<boolean> {
-    return bcrypt.compare(password, this.password);
+  async comparePassword(password: string, hasher: IPasswordHasher = defaultPasswordHasher): Promise<boolean> {
+    return hasher.compare(password, this.password);
   }
 
   changeName(newName: string) {

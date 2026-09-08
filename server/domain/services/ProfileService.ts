@@ -35,6 +35,7 @@ export class ProfileService {
         throw new BusinessException('Email already in use');
       }
       user.email = updates.email;
+      user.emailVerifiedAt = null; // Email changed -> requires re-verification
     }
 
     if (updates.name) {
@@ -50,6 +51,16 @@ export class ProfileService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    if (user.role === 'admin') {
+      const orgUsers = await this.userRepository.findAllByOrg(user.orgId);
+      const otherMembers = orgUsers.filter((u) => u.id !== userId);
+      const otherAdmins = otherMembers.filter((u) => u.role === 'admin' && u.isActive);
+      if (otherMembers.length > 0 && otherAdmins.length === 0) {
+        throw new BusinessException('Cannot delete account: you are the sole admin of this workspace. Promote another member first.');
+      }
+    }
+
     await this.userRepository.delete(userId);
   }
 

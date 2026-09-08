@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { UserService } from './UserService';
+import { User } from '../entities/User';
 import { InMemoryUserRepository } from '../../infrastructure/repositories/InMemoryUserRepository';
 import { ITokenStore } from '../../domain/interfaces/ITenant';
 
@@ -73,6 +74,23 @@ describe('UserService', () => {
       // Target untouched by the cross-tenant attempt.
       expect((await userRepository.findById(user.id))?.isActive).toBe(true);
     });
+
+    it('refuses to deactivate caller own account', async () => {
+      const { user } = await userService.createUser('John Doe', 'john@example.com', ORG);
+      await expect(
+        userService.toggleUserStatus(user.id, ORG, user.id)
+      ).rejects.toThrow('Cannot deactivate your own account');
+    });
+
+    it('refuses to deactivate the sole admin of the org', async () => {
+      const admin = await User.create('Admin', 'admin@example.com', 'Pass1', 'admin');
+      admin.orgId = ORG;
+      await userRepository.save(admin);
+
+      await expect(
+        userService.toggleUserStatus(admin.id, ORG, 'other-actor')
+      ).rejects.toThrow('Cannot deactivate the sole admin of the workspace');
+    });
   });
 
   describe('deleteUser', () => {
@@ -82,6 +100,23 @@ describe('UserService', () => {
 
       const found = await userRepository.findById(user.id);
       expect(found).toBeNull();
+    });
+
+    it('refuses to delete caller own account via user management', async () => {
+      const { user } = await userService.createUser('John Doe', 'john@example.com', ORG);
+      await expect(
+        userService.deleteUser(user.id, ORG, user.id)
+      ).rejects.toThrow('Cannot delete your own account via user management');
+    });
+
+    it('refuses to delete the sole admin of the org', async () => {
+      const admin = await User.create('Admin', 'admin@example.com', 'Pass1', 'admin');
+      admin.orgId = ORG;
+      await userRepository.save(admin);
+
+      await expect(
+        userService.deleteUser(admin.id, ORG, 'other-actor')
+      ).rejects.toThrow('Cannot delete the sole admin of the workspace');
     });
 
     it('throws NotFoundException if user does not exist', async () => {

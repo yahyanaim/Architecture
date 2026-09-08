@@ -63,18 +63,28 @@ export class JobQueue {
     if (this.running) return 0;
     this.running = true;
     try {
+      // Reclaim zombie jobs stuck in 'running' for > 10 minutes (e.g. crashed process)
+      const zombieCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+      db.prepare("UPDATE jobs SET status = 'queued', attempts = attempts + 1, updated_at = ? WHERE status = 'running' AND updated_at < ?")
+        .run(now(), zombieCutoff);
+
       const due = db
         .prepare("SELECT * FROM jobs WHERE status = 'queued' AND run_at <= ? ORDER BY id ASC LIMIT 20")
         .all(now()) as any[];
       let done = 0;
       for (const job of due) {
+        // Atomic claim: only one worker transitions the job from 'queued' to 'running'
+        const claim = db
+          .prepare("UPDATE jobs SET status = 'running', updated_at = ? WHERE id = ? AND status = 'queued'")
+          .run(now(), job.id);
+        if (claim.changes === 0) continue; // Claimed by another worker
+
         const handler = this.handlers[job.type];
         if (!handler) {
           db.prepare("UPDATE jobs SET status = 'dead', last_error = ?, updated_at = ? WHERE id = ?")
             .run(`no handler for type "${job.type}"`, now(), job.id);
           continue;
         }
-        db.prepare("UPDATE jobs SET status = 'running', updated_at = ? WHERE id = ?").run(now(), job.id);
         try {
           await handler(JSON.parse(job.payload));
           db.prepare("UPDATE jobs SET status = 'done', updated_at = ? WHERE id = ?").run(now(), job.id);

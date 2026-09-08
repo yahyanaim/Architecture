@@ -57,7 +57,9 @@ const stats = new Map<string, RouteStat>();
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction): void {
   const start = Date.now();
   res.on('finish', () => {
-    const route = `${req.method} ${req.route?.path ? req.baseUrl + req.route.path : req.baseUrl || req.path}`;
+    const route = req.route?.path
+      ? `${req.method} ${req.baseUrl + req.route.path}`
+      : `${req.method} [unmatched]`;
     const s = stats.get(route) ?? { count: 0, errors: 0, totalMs: 0 };
     s.count += 1;
     if (res.statusCode >= 500) s.errors += 1;

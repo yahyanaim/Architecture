@@ -60,6 +60,7 @@ describe('BillingService', () => {
     expect(sub.providerRef).toBe('sub_1');
     expect(sub.customerRef).toBe('cus_1');
     expect(sub.hasAccess()).toBe(true);
+    expect((await orgs.findById('o1'))?.plan).toBe('pro');
   });
 
   it('syncSubscription maps status and never applies unknown prices', async () => {
@@ -69,6 +70,7 @@ describe('BillingService', () => {
     expect(synced.plan).toBe('pro'); // unknown price -> plan untouched
     const upgraded = await svc.syncSubscription({ subscriptionId: 'sub_1', stripeStatus: 'active', pricePlan: 'enterprise' });
     expect(upgraded.plan).toBe('enterprise');
+    expect((await orgs.findById('o1'))?.plan).toBe('enterprise');
   });
 
   it('cancelSubscription cuts access immediately', async () => {
@@ -76,6 +78,7 @@ describe('BillingService', () => {
     const sub = await svc.cancelSubscription('sub_1');
     expect(sub.status).toBe('canceled');
     expect(sub.hasAccess()).toBe(false);
+    expect((await orgs.findById('o1'))?.plan).toBe('free');
   });
 
   it('dunning: payment failure grants grace, success clears it', async () => {

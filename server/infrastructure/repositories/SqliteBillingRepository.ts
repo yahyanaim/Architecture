@@ -90,6 +90,13 @@ export class SqliteBillingRepository implements IOrganizationRepository, ISubscr
     sub.status = status;
     sub.updatedAt = new Date();
     await this.save(sub);
+
+    const org = await this.findById(orgId);
+    if (org) {
+      org.plan = plan;
+      await this.save(org);
+    }
+
     return sub;
   }
 }

@@ -101,7 +101,11 @@ export class UserController {
       }
       const { id } = parseResult.data;
 
-      const user = await this.userService.toggleUserStatus(id, tenantReq.tenant.orgId);
+      const user = await this.userService.toggleUserStatus(
+        id,
+        tenantReq.tenant.orgId,
+        tenantReq.account?.id ?? tenantReq.user?.userId
+      );
 
       const response: UserResponseDTO = {
         id: user.id,
@@ -131,7 +135,11 @@ export class UserController {
       }
       const { id } = parseResult.data;
 
-      await this.userService.deleteUser(id, authReq.tenant.orgId);
+      await this.userService.deleteUser(
+        id,
+        authReq.tenant.orgId,
+        authReq.account?.id ?? authReq.user?.userId
+      );
       audit('user.deleted', authReq.user?.userId ?? 'unknown', { targetUserId: id });
       res.status(204).send();
     } catch (error) {

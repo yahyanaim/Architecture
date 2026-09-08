@@ -12,7 +12,11 @@ vi.mock('./features/auth/api/authApi', async (importOriginal) => {
   const mod = await importOriginal<typeof import('./features/auth/api/authApi')>();
   return {
     ...mod,
-    authApi: { ...mod.authApi, me: () => Promise.reject(new Error('unauthenticated')) },
+    authApi: {
+      ...mod.authApi,
+      me: () => Promise.reject(new Error('unauthenticated')),
+      refresh: () => Promise.reject(new Error('unauthenticated')),
+    },
   };
 });
 

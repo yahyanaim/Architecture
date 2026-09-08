@@ -19,13 +19,11 @@ export function audit(event: string, actorId: string, details: Record<string, un
   const line = JSON.stringify(entry) + '\n';
   console.log('[AUDIT]', JSON.stringify(entry));
 
-  try {
-    const dir = path.dirname(AUDIT_LOG_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.appendFileSync(AUDIT_LOG_PATH, line, 'utf-8');
-  } catch {
-    // fail silently — audit should never break the app
-  }
+  const dir = path.dirname(AUDIT_LOG_PATH);
+  fs.promises
+    .mkdir(dir, { recursive: true })
+    .then(() => fs.promises.appendFile(AUDIT_LOG_PATH, line, 'utf-8'))
+    .catch(() => {
+      // fail silently — audit should never break the app
+    });
 }

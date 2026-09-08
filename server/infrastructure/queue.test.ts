@@ -43,4 +43,22 @@ describe('job queue', () => {
     expect(row.status).toBe('dead');
     expect(row.attempts).toBe(2);
   });
+
+  it('recovers zombie jobs stuck in running status', async () => {
+    let processed = false;
+    const q = new JobQueue({ send: async () => undefined });
+    q.register('zombie.task', async () => { processed = true; });
+    const id = await q.enqueue('zombie.task', {});
+
+    // Simulate a crashed worker: job was left in 'running' 15 minutes ago
+    const oldTimestamp = new Date(Date.now() - 15 * 60_000).toISOString();
+    db.prepare("UPDATE jobs SET status = 'running', updated_at = ? WHERE id = ?").run(oldTimestamp, id);
+
+    // Processing due jobs should recover the zombie and execute it
+    const done = await q.processDue();
+    expect(done).toBe(1);
+    expect(processed).toBe(true);
+    const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id) as any;
+    expect(row.status).toBe('done');
+  });
 });
