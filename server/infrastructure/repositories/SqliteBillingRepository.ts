@@ -39,25 +39,47 @@ export class SqliteBillingRepository implements IOrganizationRepository, ISubscr
       return;
     }
     db.prepare(
-      `INSERT INTO subscriptions (org_id, plan, status, provider, provider_ref, current_period_end, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO subscriptions (org_id, plan, status, provider, provider_ref, customer_ref, grace_until, current_period_end, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(org_id) DO UPDATE SET plan=excluded.plan, status=excluded.status, provider=excluded.provider,
-         provider_ref=excluded.provider_ref, current_period_end=excluded.current_period_end, updated_at=excluded.updated_at`
+         provider_ref=excluded.provider_ref, customer_ref=excluded.customer_ref, grace_until=excluded.grace_until,
+         current_period_end=excluded.current_period_end, updated_at=excluded.updated_at`
     ).run(
       entity.orgId, entity.plan, entity.status, entity.provider, entity.providerRef,
+      entity.customerRef, entity.graceUntil?.toISOString() ?? null,
       entity.currentPeriodEnd?.toISOString() ?? null,
       entity.createdAt.toISOString(), now()
     );
+  }
+
+  async recordWebhookEvent(eventId: string, type: string): Promise<boolean> {
+    // First insert wins; concurrent duplicate delivery gets 0 changes.
+    const res = db.prepare(
+      'INSERT INTO webhook_events (event_id, type, received_at) VALUES (?, ?, ?) ON CONFLICT(event_id) DO NOTHING'
+    ).run(eventId, type, now());
+    return Number(res.changes) === 1;
   }
 
   // -- subscriptions (billing seam) --
   async findByOrgId(orgId: string): Promise<Subscription | null> {
     const r = db.prepare('SELECT * FROM subscriptions WHERE org_id = ?').get(orgId) as any;
     if (!r) return null;
+    return this.row(r);
+  }
+
+  async findByProviderRef(providerRef: string): Promise<Subscription | null> {
+    const r = db.prepare('SELECT * FROM subscriptions WHERE provider_ref = ?').get(providerRef) as any;
+    if (!r) return null;
+    return this.row(r);
+  }
+
+  private row(r: any): Subscription {
     return new Subscription(
       r.org_id, r.plan as Plan, r.status as SubscriptionStatus, r.provider, r.provider_ref,
       r.current_period_end ? new Date(r.current_period_end) : null,
-      new Date(r.created_at), new Date(r.updated_at)
+      new Date(r.created_at), new Date(r.updated_at),
+      r.customer_ref ?? null,
+      r.grace_until ? new Date(r.grace_until) : null
     );
   }
 

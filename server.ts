@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import { createServer as createViteServer } from "vite";
 import { app } from "./server/app";
 import { PORT, IS_PROD } from "./server/config/index";
 import { migrate } from "./server/infrastructure/db/migrate";
@@ -23,6 +22,9 @@ async function startServer() {
   }
 
   if (!IS_PROD) {
+    // Lazy import: vite is a dev-only dependency. A static import would make
+    // the production bundle (and pruned image) require it at boot and crash.
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: { overlay: false } },
       appType: "spa",

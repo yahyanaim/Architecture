@@ -1,7 +1,7 @@
 # AUDIT — Solid Starter SaaS Assessment
 
 **Date:** September 2026 · **Method:** code read (all layers) + executed verification
-**Evidence (this session):** `tsc --noEmit` clean · Vitest **10 files / 58 tests pass** ·
+**Evidence (this session):** `tsc --noEmit` clean · Vitest **12 files / 73 tests pass** · Docker image verified end-to-end (SPA at `/`, API, register in-container) · Stripe webhook verified live with locally-signed events (apply → duplicate → grace → 401 on tamper) ·
 live server: `GET /health` 200, unauthenticated `/api/users` 401 ·
 SQLite live: 8 tables, migration `001_init` applied, 4 users / 2 orgs / 2 subscriptions / 3 jobs ·
 secret scan clean · no sensitive files tracked in git.
@@ -20,11 +20,11 @@ gated path to scale, both prepared for. Details per domain below.
 | Architecture & layering | 9/10 | Real ports/adapters, DI, one composition root, env isolated in config |
 | Authentication & sessions | 9/10 | Access+rotating refresh, reuse detection, lockout, 3 throttle layers |
 | Multi-tenancy | 8/10 | Org-scoped ports/queries/middleware; single-org-per-user (documented limit) |
-| Billing readiness | 7/10 | Row-per-org seam + `requirePlan` + subscription endpoint; no provider yet |
+| Billing readiness | 8/10 | Webhook + checkout + portal implemented (SDK-free), idempotent, dunning grace enforced + visible; needs real keys |
 | Background jobs & mail | 8/10 | Durable queue, backoff, dead-letter, swappable `Mailer`; single-process worker |
 | Data & migrations | 8/10 | Ledgered portable SQL, boot-ordered, legacy import; SQLite ceiling noted |
 | Observability | 7/10 | JSON logs, metrics endpoint, 5xx hook; no distributed tracing/APM |
-| Testing | 8/10 | 58 tests incl. theft, tenancy, cross-org guards, tripwire, adapters, queue; no HTTP auth tests (deliberate), no E2E |
+| Testing | 8/10 | 73 tests incl. theft, tenancy, cross-org guards, tripwire, adapters, billing (HMAC, dunning, idempotency), queue; no HTTP auth tests (deliberate), no E2E |
 | Docs | 9/10 | ARCHITECTURE + KICKOFF + SCENARIO + USAGE + REVIEW mutually consistent (verified by grep) |
 | Repo hygiene | 10/10 | No secrets, DB, outbox, or logs tracked; runtime files gitignored |
 
@@ -35,7 +35,7 @@ gated path to scale, both prepared for. Details per domain below.
 3. **Tenancy is structural.** `org_id` on tenant tables, scoped repository signatures, tenant from `req.tenant` only — a new feature following `SAAS_KICKOFF.md` cannot accidentally go cross-tenant.
 4. **Fail-closed defaults.** JWT secret refuses prod boot when missing; CORS allowlist is a real array; logout mirrors cookie flags; error responses never leak internals on 5xx.
 5. **Async work is durable.** Jobs survive restarts, retry with backoff, park visibly in `dead`; mail provider is one line behind a port.
-6. **Every claim is tested or logged.** 58 tests cover the risky paths (rotation theft, invite, reset-kills-sessions, tenancy isolation incl. cross-org id-oracle guards, architecture tripwire, adapters, queue retry→dead); metrics + audit + request IDs cover runtime.
+6. **Every claim is tested or logged.** 73 tests cover the risky paths (rotation theft, invite, reset-kills-sessions, tenancy isolation incl. cross-org id-oracle guards, architecture tripwire, webhook idempotency + dunning, adapters, queue retry→dead); metrics + audit + request IDs cover runtime.
 
 ## Gaps (ranked, with effort)
 
@@ -43,7 +43,7 @@ gated path to scale, both prepared for. Details per domain below.
 |---|-----|--------|--------|
 | 1 | SQLite single-writer; Postgres adapter is a stub | Caps scale-out | M (needs `DATABASE_URL`; migrations already portable) |
 | 2 | No mail provider (LogMailer only) | No real delivery | S (implement `Mailer` port) |
-| 3 | No billing provider webhook | Plans can't be sold yet | M (webhook → `updatePlan`; seam ready) |
+| 3 | No billing provider credentials | Code complete, needs real keys + price ids | S (config only) |
 | 4 | Access JWT stateless ≤15m after credential change | 15-min window, accepted tradeoff | S (denylist or shorter TTL if needed) |
 | 5 | Single-org-per-user; no org switching/invites-across-orgs | Limits team models | M (membership table when required) |
 | 6 | No E2E / HTTP auth tests; no APM/tracing | Confidence at scale | M |
@@ -58,7 +58,7 @@ gated path to scale, both prepared for. Details per domain below.
 - [x] Migrations, seed/import, per-env runtime data
 - [x] Docs an agent can build from (`SAAS_KICKOFF.md`)
 - [ ] Postgres adapter (needs credentials)
-- [ ] Mail + billing providers (ports ready)
+- [ ] Mail provider (port ready) + real Stripe keys/price ids (code ready)
 - [ ] E2E suite, APM, multi-instance worker lease
 
 **Bottom line:** start building product on it now; spend the first paid sprint on rows 1–3 of the gaps table. Nothing on that list requires re-architecture — all three plug into ports that already exist.

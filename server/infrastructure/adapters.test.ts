@@ -52,4 +52,19 @@ describe('sqlite adapters', () => {
     expect(updated.plan).toBe('pro');
     expect((await billing.findByOrgId('o1'))?.status).toBe('active');
   });
+
+  it('billing: customer/grace columns persist; webhook ledger is first-wins', async () => {
+    const billing = new SqliteBillingRepository();
+    const sub = new Subscription('o1', 'pro', 'past_due', 'stripe', 'sub_1');
+    sub.customerRef = 'cus_1';
+    sub.graceUntil = new Date('2030-01-01T00:00:00.000Z');
+    await billing.save(sub);
+    const loaded = (await billing.findByOrgId('o1'))!;
+    expect(loaded.customerRef).toBe('cus_1');
+    expect(loaded.graceUntil?.toISOString()).toBe('2030-01-01T00:00:00.000Z');
+    expect((await billing.findByProviderRef('sub_1'))?.orgId).toBe('o1');
+
+    expect(await billing.recordWebhookEvent('evt_9', 'x')).toBe(true);
+    expect(await billing.recordWebhookEvent('evt_9', 'x')).toBe(false);
+  });
 });

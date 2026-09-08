@@ -17,8 +17,16 @@ export interface IOrganizationRepository {
 // every org gets a (free/trialing) row at creation.
 export interface ISubscriptionRepository {
   findByOrgId(orgId: string): Promise<Subscription | null>;
+  /** Reverse lookup for webhooks (Stripe sends subscription id, not org). */
+  findByProviderRef(providerRef: string): Promise<Subscription | null>;
   save(sub: Subscription): Promise<void>;
   updatePlan(orgId: string, plan: Plan, status: SubscriptionStatus): Promise<Subscription>;
+  /**
+   * Webhook idempotency ledger: returns true on FIRST insert, false when the
+   * event was already seen (replay). Stripe retries deliveries, so the route
+   * must check this BEFORE applying any state change.
+   */
+  recordWebhookEvent(eventId: string, type: string): Promise<boolean>;
 }
 
 // Session + single-use token store (refresh rotation, verify/reset/invite).

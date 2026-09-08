@@ -52,6 +52,11 @@ const SQL_ALLOWLIST: Allowance[] = [
     match: 'delete from users where id = ?',
     reason: 'PK delete reached only after UserService.deleteUser(id, orgId) proves target-in-org (404 otherwise).',
   },
+  {
+    file: 'SqliteBillingRepository.ts',
+    match: 'select * from subscriptions where provider_ref = ?',
+    reason: 'WEBHOOK REVERSE LOOKUP: Stripe sends subscription id, not org. Called only post-HMAC from webhook handlers; keyed by unguessable provider id, single row, no listing.',
+  },
 ];
 
 function tenantTables(): Set<string> {

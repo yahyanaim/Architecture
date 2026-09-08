@@ -300,3 +300,16 @@ Invite flow fixed as a side effect (was: created accounts that could never log i
 
 **Overall Quality:** Very good (9/10 as a SaaS starter)
 **Production Readiness:** MVP-ready on SQLite; Postgres + provider wiring before scale.
+
+---
+
+# Review Cycle: Deploy + Billing (September 2026)
+
+## 1. Production Dockerfile fixed (was: API-only image)
+The prod stage never ran `npm run build`, so `dist/` didn't exist. Now: full install → `vite build` (SPA) + `esbuild server.ts` (68KB bundle, our code only) → `npm prune --omit=dev` → ship `node_modules` (no tsx/vite/vitest) + `dist/` + `dist-server/` + `migrations/` + `package.json`. Verified end-to-end in Docker: boots, migrates, serves SPA at `/`, API at `/api`, register works. Side fixes the trim required: `vite`/`@vitejs/*`/`@tailwindcss/vite` moved to devDependencies (were duplicated in both), `server.ts` lazy-imports vite so the pruned image never loads it. `.dockerignore` keeps `.env`/`data/` out of the image.
+
+## 2. Stripe billing against the seam (was: entity + read endpoint only)
+SDK-free client (`fetch` + HMAC, `server/infrastructure/billing.ts`), domain `BillingService` (sole subscription writer), migration `002_billing` (customer_ref, grace_until, webhook_events ledger). Webhook mounts `express.raw()` before `express.json()` (raw bytes required for HMAC) and handles checkout/sync/cancel/payment_failed/payment_succeeded with **first-wins idempotency** (replays 200 without re-applying). Checkout + customer-portal endpoints fail explicitly (501) when unconfigured. Dunning: `past_due` + 7-day grace via `Subscription.hasAccess()`, enforced by `requirePlan`, visible on `GET /subscription` (`access`, `graceUntil`, `hasPaymentMethod`). Unknown price ids never blind-change plans. Live-verified with locally-signed events: apply → duplicate → grace → 401 on tamper → 501 without key. Tests 58 → 73.
+
+## 3. Docs caught up
+ARCHITECTURE (billing routes, prod image, 73 tests), USAGE (endpoints, Stripe env), KICKOFF checklist, README stats, AUDIT counts.

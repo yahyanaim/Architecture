@@ -139,7 +139,7 @@ Route chain: authenticate (401) -> requireActiveUser (401/403)
 `GET /` read · `PUT /` update name/email · `PUT /password` change (revokes others, re-mints caller) · `DELETE /` delete own account.
 
 ### Billing / Ops
-`GET /api/billing/subscription` (tenant's row) · `GET /api/metrics` (admin-only counters) · `GET /api/health` (open).
+`GET /api/billing/subscription` (tenant's row incl. `access`, `graceUntil`, `hasPaymentMethod`) · `POST /api/billing/checkout` (Stripe Checkout Session, 501 when unconfigured) · `POST /api/billing/portal` (customer portal) · `POST /api/billing/webhook` (raw-body HMAC, idempotent ledger, handles checkout/sync/cancel/payment_failed/succeeded) · `GET /api/metrics` (admin-only counters) · `GET /api/health` (open).
 
 ## Data & Background Flows
 
@@ -152,10 +152,14 @@ Route chain: authenticate (401) -> requireActiveUser (401/403)
 
 httpOnly session cookies · bcrypt hashes only · first-user-admin bootstrap (no role input) · 5-fail/15-min lockout + IP (5/15m) + per-account login (10/15m) + registration (3/hour/IP) throttles · single-use hashed tokens with sensible TTLs · Helmet + CORS allowlist · JWT fail-closed in prod · runtime DB/outbox gitignored · Swagger dev-only.
 
+## Production image
+
+`Dockerfile` (multi-stage): full install → `npm run build` (Vite SPA + esbuild server bundle, our code only) → prune dev deps → ship `node_modules` (prod-only, no tsx/vite) + `dist/` + `dist-server/` + `migrations/` + `package.json`. Verified: boots, migrates, serves SPA at `/` and API at `/api`. Mount `/data` (`DB_PATH`), set `JWT_SECRET`/`APP_URL`/`CORS_ORIGIN`. CI (`.github/workflows/ci.yml`) runs lint + tests on push/PR.
+
 ## Testing
 
 ```
-Test Files  10 passed (10) · Tests  58 passed (58)
+Test Files  12 passed (12) · Tests  73 passed (73)
 ```
-AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 11 (invite, tenancy scoping, cross-org guards) · ProfileService 11 · requireActiveUser 4 · requirePlan 4 · tenancy guard 2 · SQLite adapters 3 · job queue 3 · health 1 · App render 2.
+AuthService 17 (register/login/roles/rotation-theft/verify/reset/invite) · UserService 11 (invite, tenancy scoping, cross-org guards) · ProfileService 11 · BillingService 7 (checkout/dunning/idempotency) · billing client 6 (HMAC, price map) · requireActiveUser 4 · requirePlan 5 (incl. dunning grace) · tenancy guard 2 · SQLite adapters 4 (incl. webhook ledger) · job queue 3 · health 1 · App render 2.
 Conventions: services tested against in-file doubles; adapters + queue against real isolated `:memory:` SQLite (`migrate(db)` in `beforeAll`); architecture tripwire `server/tenancy-guard.test.ts` (SQL org-scope + route-chain order, closed-by-default for new route files); no HTTP tests except health (rate limiters make HTTP auth tests flaky — test services instead).

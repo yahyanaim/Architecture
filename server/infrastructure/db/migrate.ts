@@ -21,7 +21,12 @@ import { db } from '../database';
 
 // ESM-safe dir resolution (`__dirname` doesn't exist in ESM scope — the
 // project is `"type": "module"` and runs under tsx as ESM).
-const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
+// `MIGRATIONS_DIR` override exists for packaged deploys (Docker): the bundle
+// flattens source files, so SQL ships separately (see Dockerfile) and the
+// path is injected at runtime instead of derived from this file's location.
+const MIGRATIONS_DIR =
+  process.env.MIGRATIONS_DIR ??
+  path.join(path.dirname(fileURLToPath(import.meta.url)), 'migrations');
 
 function now(): string {
   return new Date().toISOString();

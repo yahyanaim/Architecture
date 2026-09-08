@@ -35,6 +35,15 @@ export const APP_URL = process.env.APP_URL || 'http://localhost:40001';
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 export const ERROR_WEBHOOK_URL = process.env.ERROR_WEBHOOK_URL || '';
 
+// Billing (Stripe). All optional: when STRIPE_SECRET_KEY is unset the
+// checkout/portal endpoints answer 501 (fail-explicit) while the webhook
+// rejects everything (no secret = cannot verify). Price ids map Stripe
+// prices to our plans (see priceToPlan in infrastructure/billing.ts).
+export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+export const STRIPE_PRICE_PRO = process.env.STRIPE_PRICE_PRO || '';
+export const STRIPE_PRICE_ENTERPRISE = process.env.STRIPE_PRICE_ENTERPRISE || '';
+
 // CORS allowlist. `.env` documents a comma-separated list, so split it here
 // into a real array — passing the raw string to `cors({ origin })` would only
 // ever match a single origin and silently reject the rest.
@@ -49,4 +58,4 @@ export const CORS_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:4000')
 export const TRUST_PROXY = process.env.TRUST_PROXY ?? '1';
 export const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 40001;
 
-export default { JWT_SECRET, JWT_EXPIRES_IN, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS, APP_URL, LOG_LEVEL, ERROR_WEBHOOK_URL, CORS_ORIGINS, TRUST_PROXY, PORT, IS_PROD };
+export default { JWT_SECRET, JWT_EXPIRES_IN, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS, APP_URL, LOG_LEVEL, ERROR_WEBHOOK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PRO, STRIPE_PRICE_ENTERPRISE, CORS_ORIGINS, TRUST_PROXY, PORT, IS_PROD };

@@ -27,7 +27,10 @@ export function createRequirePlan(subscriptionRepository: ISubscriptionRepositor
           return;
         }
         const sub = await subscriptionRepository.findByOrgId(r.tenant.orgId);
-        if (!sub || !sub.isActive() || !allowed.includes(sub.plan)) {
+        // hasAccess() (not isActive()): past_due inside its dunning grace
+        // keeps working — cutting access mid-grace would contradict the
+        // graceUntil we show the user on GET /billing/subscription.
+        if (!sub || !sub.hasAccess() || !allowed.includes(sub.plan)) {
           res.status(403).json({
             message: 'This feature requires a paid plan',
             code: 'upgrade_required',

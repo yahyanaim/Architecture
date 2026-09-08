@@ -30,7 +30,9 @@ Required variables:
 - `APP_URL`: Public base URL for email links (verify / reset / invite)
 - `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL_DAYS`: Session lifetimes (defaults: `15m` / `30`)
 - `LOG_LEVEL`, `ERROR_WEBHOOK_URL`: Observability knobs
-- See `.env.example` for mail (`LogMailer` outbox by default) and future Stripe keys.
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`: Billing (both unset = checkout/portal answer 501, webhook 503)
+- `STRIPE_PRICE_PRO`, `STRIPE_PRICE_ENTERPRISE`: Price ids mapping Stripe prices to plans
+- See `.env.example` for mail (`LogMailer` outbox by default) and all billing keys.
 
 ## Building Your Own Features
 
@@ -85,7 +87,10 @@ The template includes the following endpoints out of the box:
 - `GET /api/profile`, `PUT /api/profile`, `PUT /api/profile/password` (revokes other sessions), `DELETE /api/profile`
 
 **Billing / System:**
-- `GET /api/billing/subscription`: Current org's plan/status
+- `GET /api/billing/subscription`: Current org's plan/status/access/grace info
+- `POST /api/billing/checkout`: Create Stripe Checkout session for pro/enterprise (501 when unconfigured)
+- `POST /api/billing/portal`: Stripe customer portal link
+- `POST /api/billing/webhook`: Stripe events (HMAC-verified, idempotent; needs raw body + `STRIPE_WEBHOOK_SECRET`)
 - `GET /api/metrics`: Request metrics (admin-only)
 - `GET /api/health`: Returns the server status and timestamp.
 

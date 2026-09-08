@@ -23,8 +23,18 @@ class MemOrgs implements IOrganizationRepository {
 
 class MemSubs implements ISubscriptionRepository {
   map = new Map<string, Subscription>();
+  seenEvents = new Set<string>();
   async findByOrgId(orgId: string) { return this.map.get(orgId) ?? null; }
+  async findByProviderRef(ref: string) {
+    for (const s of this.map.values()) if (s.providerRef === ref) return s;
+    return null;
+  }
   async save(s: Subscription) { this.map.set(s.orgId, s); }
+  async recordWebhookEvent(eventId: string) {
+    if (this.seenEvents.has(eventId)) return false;
+    this.seenEvents.add(eventId);
+    return true;
+  }
   async updatePlan(orgId: string, plan: Plan, status: SubscriptionStatus) {
     const s = this.map.get(orgId) ?? new Subscription(orgId);
     s.plan = plan; s.status = status;

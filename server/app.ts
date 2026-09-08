@@ -20,7 +20,7 @@ import swaggerUi from 'swagger-ui-express';
 import { userRoutes } from './api/routes/userRoutes';
 import { authRoutes } from './api/routes/authRoutes';
 import { profileRoutes } from './api/routes/profileRoutes';
-import { billingRoutes } from './api/routes/billingRoutes';
+import { billingRoutes, billingWebhook } from './api/routes/billingRoutes';
 
 // ============================================================================
 // Express composition root. Middleware ORDER is the request lifecycle — each
@@ -53,6 +53,11 @@ const apiLimiter = rateLimit({
 });
 
 app.use('/api', apiLimiter);
+
+// Stripe webhook FIRST: signature verification needs the RAW body bytes, so
+// this route mounts `express.raw()` BEFORE the global `express.json()` below
+// (a parsed body would break the HMAC). See billingRoutes for the handler.
+app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), billingWebhook);
 
 app.use(express.json());
 app.use(cookieParser());

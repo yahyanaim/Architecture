@@ -58,4 +58,22 @@ describe('requirePlan', () => {
     expect(r.status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
   });
+
+  it('allows past_due inside dunning grace, denies after expiry', async () => {
+    const inGrace = new Subscription('o1', 'pro', 'past_due');
+    inGrace.graceUntil = new Date(Date.now() + 3600_000);
+    const repoGrace = { async findByOrgId() { return inGrace; } } as unknown as ISubscriptionRepository;
+    const next1 = vi.fn();
+    await createRequirePlan(repoGrace)('pro')(reqWithTenant('o1'), res(), next1);
+    expect(next1).toHaveBeenCalled();
+
+    const expired = new Subscription('o1', 'pro', 'past_due');
+    expired.graceUntil = new Date(Date.now() - 1000);
+    const repoExpired = { async findByOrgId() { return expired; } } as unknown as ISubscriptionRepository;
+    const r = res();
+    const next2 = vi.fn();
+    await createRequirePlan(repoExpired)('pro')(reqWithTenant('o1'), r, next2);
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(next2).not.toHaveBeenCalled();
+  });
 });
