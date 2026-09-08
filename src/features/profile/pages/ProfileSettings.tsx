@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { profileApi, Profile } from '../api/profileApi';
+import { validatePassword } from '@/features/auth/lib/password';
+import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { toast } from 'sonner';
 import { Loader2, Trash2 } from 'lucide-react';
@@ -39,8 +41,8 @@ export function ProfileSettings() {
         setProfile(data);
         setName(data.name);
         setEmail(data.email);
-      } catch {
-        toast.error('Failed to load profile');
+      } catch (error: unknown) {
+        toast.error(apiErrorMessage(error, 'Failed to load profile'));
       } finally {
         setIsLoading(false);
       }
@@ -58,8 +60,8 @@ export function ProfileSettings() {
         setUser({ ...user, name: updated.name, email: updated.email });
       }
       toast.success('Saved');
-    } catch {
-      toast.error('Failed to save');
+    } catch (error: unknown) {
+      toast.error(apiErrorMessage(error, 'Failed to save'));
     } finally {
       setIsSaving(false);
     }
@@ -73,20 +75,9 @@ export function ProfileSettings() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-    if (!/[A-Z]/.test(newPassword)) {
-      toast.error('Password must contain an uppercase letter');
-      return;
-    }
-    if (!/[a-z]/.test(newPassword)) {
-      toast.error('Password must contain a lowercase letter');
-      return;
-    }
-    if (!/[0-9]/.test(newPassword)) {
-      toast.error('Password must contain a number');
+    const pwError = validatePassword(newPassword);
+    if (pwError) {
+      toast.error(pwError);
       return;
     }
 
@@ -97,8 +88,8 @@ export function ProfileSettings() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch {
-      toast.error('Failed to change password');
+    } catch (error: unknown) {
+      toast.error(apiErrorMessage(error, 'Failed to change password'));
     } finally {
       setIsSaving(false);
     }
@@ -284,10 +275,10 @@ export function ProfileSettings() {
                           // SPA navigation (not reload): cookies are cleared,
                           // guards redirect to /login from any route.
                           navigate('/login', { replace: true });
-                        } catch {
-                          toast.error('Failed to delete account');
-                          setIsDeleting(false);
-                        }
+                      } catch (error: unknown) {
+                        toast.error(apiErrorMessage(error, 'Failed to delete account'));
+                        setIsDeleting(false);
+                      }
                       }}
                     className="bg-red-600 text-white hover:bg-red-700"
                   >

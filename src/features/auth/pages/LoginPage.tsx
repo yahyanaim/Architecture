@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { validateLoginPassword } from '../lib/password';
+import { apiErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import axios from 'axios';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -26,8 +27,11 @@ export function LoginPage() {
 
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    } else {
+      // No strength rules at login (backend accepts min 1) — they apply at
+      // set-time only. See validateLoginPassword.
+      const pwError = validateLoginPassword(password);
+      if (pwError) newErrors.password = pwError;
     }
 
     setErrors(newErrors);
@@ -44,10 +48,7 @@ export function LoginPage() {
       toast.success('Login successful!');
       navigate('/', { replace: true });
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Login failed'
-        : 'Login failed';
-      toast.error(message);
+      toast.error(apiErrorMessage(error, 'Login failed'));
     } finally {
       setIsLoading(false);
     }

@@ -1,7 +1,7 @@
 # AUDIT — Solid Starter SaaS Assessment
 
 **Date:** September 2026 · **Method:** code read (all layers) + executed verification
-**Evidence (this session):** `tsc --noEmit` clean · Vitest **13 files / 75 tests pass** · Docker image verified end-to-end (SPA at `/`, API, register in-container) · Stripe webhook verified live with locally-signed events (apply → duplicate → grace → 401 on tamper) ·
+**Evidence (this session):** `tsc --noEmit` clean · Vitest **15 files / 84 tests pass** · Docker image verified end-to-end (SPA at `/`, API, register in-container) · Stripe webhook verified live with locally-signed events (apply → duplicate → grace → 401 on tamper) ·
 live server: `GET /health` 200, unauthenticated `/api/users` 401 ·
 SQLite live: 8 tables, migration `001_init` applied, 4 users / 2 orgs / 2 subscriptions / 3 jobs ·
 secret scan clean · no sensitive files tracked in git.

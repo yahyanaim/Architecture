@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { billingApi } from '../api/billingApi';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, CreditCard, AlertTriangle } from 'lucide-react';
-import axios from 'axios';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface BillingSettingsProps {
   onNavigateToPricing?: () => void;
@@ -24,10 +24,7 @@ export function BillingSettings({ onNavigateToPricing, onBack }: BillingSettings
       const { url } = await billingApi.createPortal();
       window.location.href = url;
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Could not open billing portal'
-        : 'Could not open billing portal';
-      toast.error(message);
+      toast.error(apiErrorMessage(error, 'Could not open billing portal'));
     } finally {
       setIsOpeningPortal(false);
     }

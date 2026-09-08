@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { validatePassword } from '../lib/password';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import axios from 'axios';
+import { apiErrorMessage } from '@/lib/errors';
 
 // Deep link from invite emails: /invite?token=… (public — the token IS the
 // credential; single-use, 7d expiry, enforced server-side).
@@ -23,16 +24,18 @@ export function InvitePage() {
       toast.error('Passwords do not match');
       return;
     }
+    const pwError = validatePassword(password);
+    if (pwError) {
+      toast.error(pwError);
+      return;
+    }
     setIsLoading(true);
     try {
       await acceptInvite(token, password, confirmPassword, name.trim() ? name.trim() : undefined);
       toast.success('Welcome aboard!');
       navigate('/', { replace: true });
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Could not accept invite'
-        : 'Could not accept invite';
-      toast.error(message);
+      toast.error(apiErrorMessage(error, 'Could not accept invite'));
     } finally {
       setIsLoading(false);
     }

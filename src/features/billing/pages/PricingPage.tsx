@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { billingApi, BillingPlan } from '../api/billingApi';
 import { toast } from 'sonner';
 import { Loader2, Check, ArrowLeft } from 'lucide-react';
-import axios from 'axios';
+import { apiErrorMessage } from '@/lib/errors';
 
 interface PricingPageProps {
   onBack?: () => void;
@@ -47,10 +47,7 @@ export function PricingPage({ onBack }: PricingPageProps) {
       // Stripe-hosted checkout — full redirect, not SPA navigation.
       window.location.href = url;
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Could not start checkout'
-        : 'Could not start checkout';
-      toast.error(message);
+      toast.error(apiErrorMessage(error, 'Could not start checkout'));
     } finally {
       setPendingPlan(null);
     }

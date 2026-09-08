@@ -122,7 +122,7 @@ npm run test:coverage
 
 ## Project Stats
 
-- **78 tests passing** (services, middleware, tripwire, adapters, billing, router guards, queue)
+- **84 tests passing** (services, middleware, tripwire, adapters, billing, router, forms, queue)
 - **Strict TypeScript** with full type safety
 - **Lint passing** with no errors
 - **New here?** AI agents: read [SAAS_KICKOFF.md](./SAAS_KICKOFF.md) first. Humans: [SAAS_SCENARIO.md](./SAAS_SCENARIO.md) walks a full SaaS build on this base.

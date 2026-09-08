@@ -4,6 +4,7 @@ import { userApi } from '../api/userApi';
 import { User } from '../types';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
+import { apiErrorMessage } from '@/lib/errors';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import {
   AlertDialog,
@@ -39,7 +40,7 @@ export function UserList() {
         setSelectedUser(updatedUser);
       }
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: (error: unknown) => toast.error(apiErrorMessage(error, 'Failed to update status')),
   });
 
   const deleteMutation = useMutation({
@@ -49,7 +50,7 @@ export function UserList() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setSelectedUser(null);
     },
-    onError: () => toast.error('Failed to delete user'),
+    onError: (error: unknown) => toast.error(apiErrorMessage(error, 'Failed to delete user')),
   });
 
   if (isLoading) return <div className="text-gray-500">Loading users...</div>;

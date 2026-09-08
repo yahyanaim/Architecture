@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { authApi } from '../api/authApi';
+import { validatePassword } from '../lib/password';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import axios from 'axios';
+import { apiErrorMessage } from '@/lib/errors';
 
 // Deep link from reset emails: /reset-password?token=… (public — the token
 // IS the credential; single-use, 1h expiry, enforced server-side).
@@ -21,16 +22,18 @@ export function ResetPasswordPage() {
       toast.error('Passwords do not match');
       return;
     }
+    const pwError = validatePassword(newPassword);
+    if (pwError) {
+      toast.error(pwError);
+      return;
+    }
     setIsLoading(true);
     try {
       await authApi.resetPassword(token, newPassword, confirmNewPassword);
       toast.success('Password changed — sign in with the new one.');
       navigate('/login', { replace: true });
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Could not reset password'
-        : 'Could not reset password';
-      toast.error(message);
+      toast.error(apiErrorMessage(error, 'Could not reset password'));
     } finally {
       setIsLoading(false);
     }

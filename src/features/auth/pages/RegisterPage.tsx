@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
+import { validatePassword } from '../lib/password';
+import { apiErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
-import axios from 'axios';
 
 export function RegisterPage() {
   const [name, setName] = useState('');
@@ -32,14 +33,9 @@ export function RegisterPage() {
 
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/[A-Z]/.test(password)) {
-      newErrors.password = 'Password must contain an uppercase letter';
-    } else if (!/[a-z]/.test(password)) {
-      newErrors.password = 'Password must contain a lowercase letter';
-    } else if (!/[0-9]/.test(password)) {
-      newErrors.password = 'Password must contain a number';
+    } else {
+      const pwError = validatePassword(password);
+      if (pwError) newErrors.password = pwError;
     }
 
     if (!confirmPassword) {
@@ -62,10 +58,7 @@ export function RegisterPage() {
       toast.success('Account created successfully!');
       navigate('/', { replace: true });
     } catch (error: unknown) {
-      const message = axios.isAxiosError(error)
-        ? (error.response?.data as { message?: string })?.message ?? 'Registration failed'
-        : 'Registration failed';
-      toast.error(message);
+      toast.error(apiErrorMessage(error, 'Registration failed'));
     } finally {
       setIsLoading(false);
     }
