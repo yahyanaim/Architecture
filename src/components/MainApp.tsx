@@ -180,8 +180,20 @@ export function MainApp({ onNavigate }: MainAppProps) {
                   Traces the full request path: Component → React Query → Axios → Controller → Service → Repository.
                 </p>
               </div>
-              {isAdmin && <CreateUserForm />}
-              <UserList />
+              {/* User directory is admin-only (GET /api/users returns 403 for
+                  regular users). Render it only for admins so non-admins get
+                  an explanation instead of a failed request. */}
+              {isAdmin ? (
+                <>
+                  <CreateUserForm />
+                  <UserList />
+                </>
+              ) : (
+                <div className="text-gray-500 text-center py-12">
+                  <p>The users directory is visible to admins only.</p>
+                  <p className="mt-2">You are signed in as a regular user.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
