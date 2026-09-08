@@ -1,19 +1,19 @@
 import { useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import axios from 'axios';
 
-interface LoginPageProps {
-  onNavigateToRegister?: () => void;
-}
-
-export function LoginPage({ onNavigateToRegister }: LoginPageProps) {
+export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const { login } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const justVerified = searchParams.get('verified') === '1';
 
   const validate = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -42,6 +42,7 @@ export function LoginPage({ onNavigateToRegister }: LoginPageProps) {
     try {
       await login(email, password);
       toast.success('Login successful!');
+      navigate('/', { replace: true });
     } catch (error: unknown) {
       const message = axios.isAxiosError(error)
         ? (error.response?.data as { message?: string })?.message ?? 'Login failed'
@@ -58,6 +59,11 @@ export function LoginPage({ onNavigateToRegister }: LoginPageProps) {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-black">Welcome Back</h1>
           <p className="text-gray-500 mt-2">Sign in to your account</p>
+          {justVerified && (
+            <p className="text-green-700 bg-green-50 border border-green-200 rounded-lg text-sm mt-4 px-3 py-2">
+              Email verified — sign in to continue.
+            </p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -102,10 +108,10 @@ export function LoginPage({ onNavigateToRegister }: LoginPageProps) {
         </form>
 
         <p className="text-center mt-6 text-gray-600">
-          Don't have an account?{' '}
-          <button onClick={onNavigateToRegister} className="text-black font-medium hover:underline">
+          Don&apos;t have an account?{' '}
+          <Link to="/register" className="text-black font-medium hover:underline">
             Sign up
-          </button>
+          </Link>
         </p>
       </div>
     </div>

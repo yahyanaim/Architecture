@@ -1,14 +1,11 @@
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import axios from 'axios';
 
-interface RegisterPageProps {
-  onNavigateToLogin?: () => void;
-}
-
-export function RegisterPage({ onNavigateToLogin }: RegisterPageProps) {
+export function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,6 +13,7 @@ export function RegisterPage({ onNavigateToLogin }: RegisterPageProps) {
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({});
   const { register } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
   const validate = () => {
     const newErrors: { name?: string; email?: string; password?: string; confirmPassword?: string } = {};
@@ -62,6 +60,7 @@ export function RegisterPage({ onNavigateToLogin }: RegisterPageProps) {
     try {
       await register(name, email, password, confirmPassword);
       toast.success('Account created successfully!');
+      navigate('/', { replace: true });
     } catch (error: unknown) {
       const message = axios.isAxiosError(error)
         ? (error.response?.data as { message?: string })?.message ?? 'Registration failed'
@@ -153,9 +152,9 @@ export function RegisterPage({ onNavigateToLogin }: RegisterPageProps) {
 
         <p className="text-center mt-6 text-gray-600">
           Already have an account?{' '}
-          <button onClick={onNavigateToLogin} className="text-black font-medium hover:underline">
+          <Link to="/login" className="text-black font-medium hover:underline">
             Sign in
-          </button>
+          </Link>
         </p>
       </div>
     </div>

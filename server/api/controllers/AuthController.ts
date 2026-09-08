@@ -186,7 +186,10 @@ export class AuthController {
       }
       const user = await this.authService.verifyEmail(token);
       audit('user.verified', user.id, { email: user.email });
-      res.json({ message: 'Email verified successfully', email: user.email });
+      // Redirect (not JSON): this endpoint is opened from email links in a
+      // browser. Landing on /login?verified=1 shows a confirmation banner;
+      // API clients can still follow redirects or read the query result.
+      res.redirect(`${APP_URL}/login?verified=1`);
     } catch (error) {
       next(error);
     }

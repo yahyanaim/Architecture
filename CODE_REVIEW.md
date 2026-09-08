@@ -244,7 +244,7 @@ Tests      34 passed (34)
 1. **Replace `FileUserRepository` with SQLite** — `better-sqlite3` already installed
 2. **Add integration tests** — supertest for all API endpoints
 3. **Add middleware tests** — `authenticate`, `authorizeAdmin`, `errorHandler`
-4. **Switch to React Router** — instead of state-based navigation
+4. ~~**Switch to React Router**~~ — DONE (Sept 2026): `src/router.tsx` with guards, deep links, invite/reset pages
 5. **Add route-level code splitting** with `React.lazy`
 6. **Add API versioning** (`/api/v1/...`)
 7. **Remove unused `better-sqlite3`** or use it

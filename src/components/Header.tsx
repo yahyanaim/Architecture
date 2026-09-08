@@ -1,26 +1,16 @@
 import { LogOut, Settings, CreditCard } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '@/features/auth/context/AuthContext';
 
-type Page = 'main' | 'profile' | 'pricing' | 'billing';
-
-interface HeaderProps {
-  onNavigate?: (page: Page) => void;
-}
-
-export function Header({ onNavigate }: HeaderProps) {
+// Self-navigating via the router — no onNavigate prop drilling. Rendered
+// only inside RouterProvider (MainApp, ProfileRoute).
+export function Header() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const goHome = () => {
-    onNavigate?.('main');
-  };
-
-  const goToProfile = () => {
-    onNavigate?.('profile');
-  };
-
-  const goToBilling = () => {
-    onNavigate?.('billing');
-  };
+  const goHome = () => navigate('/');
+  const goToProfile = () => navigate('/profile');
+  const goToBilling = () => navigate('/billing');
 
   return (
     <header className="bg-white border-b border-gray-200">

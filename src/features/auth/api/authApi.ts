@@ -31,6 +31,16 @@ export const authApi = {
     return response.data;
   },
 
+  acceptInvite: async (token: string, password: string, confirmPassword: string, name?: string): Promise<AuthResponse> => {
+    const response = await apiClient.post('/auth/invite-accept', { token, password, confirmPassword, name });
+    return response.data;
+  },
+
+  resetPassword: async (token: string, newPassword: string, confirmNewPassword: string): Promise<{ message: string }> => {
+    const response = await apiClient.post('/auth/password-reset', { token, newPassword, confirmNewPassword });
+    return response.data;
+  },
+
   me: async (): Promise<AuthUser> => {
     const response = await apiClient.get('/auth/me');
     return response.data;

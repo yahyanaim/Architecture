@@ -8,7 +8,8 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
-// Event name the app listens for (see AuthRoute) to route plan-gated 403s.
+// Event name the router listens for (see router.tsx UpgradeRedirector) to
+// route plan-gated 403s.
 export const UPGRADE_REQUIRED_EVENT = 'billing:upgrade-required';
 
 // Global plan-gate handler: any API call rejected with 403 +

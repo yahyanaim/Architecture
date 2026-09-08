@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { profileApi, Profile } from '../api/profileApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ import {
 
 export function ProfileSettings() {
   const { user, setUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -274,17 +276,19 @@ export function ProfileSettings() {
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
-                    onClick={async () => {
-                      setIsDeleting(true);
-                      try {
-                        await profileApi.deleteAccount();
-                        await logout();
-                        window.location.reload();
-                      } catch {
-                        toast.error('Failed to delete account');
-                        setIsDeleting(false);
-                      }
-                    }}
+                      onClick={async () => {
+                        setIsDeleting(true);
+                        try {
+                          await profileApi.deleteAccount();
+                          await logout();
+                          // SPA navigation (not reload): cookies are cleared,
+                          // guards redirect to /login from any route.
+                          navigate('/login', { replace: true });
+                        } catch {
+                          toast.error('Failed to delete account');
+                          setIsDeleting(false);
+                        }
+                      }}
                     className="bg-red-600 text-white hover:bg-red-700"
                   >
                     Delete

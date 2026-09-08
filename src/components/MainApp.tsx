@@ -7,20 +7,20 @@ import { Footer } from '@/components/Footer';
 import { UserList } from '@/features/users/components/UserList';
 import { CreateUserForm } from '@/features/users/components/CreateUserForm';
 
-type Page = 'main' | 'profile' | 'pricing' | 'billing';
-
 interface MainAppProps {
-  onNavigate?: (page: Page) => void;
+  // Reserved for future tab deep-linking (?tab=demo). Header navigates
+  // via the router directly, so no navigation prop is needed.
+  initialTab?: 'architecture' | 'demo';
 }
 
-export function MainApp({ onNavigate }: MainAppProps) {
+export function MainApp({ initialTab = 'architecture' }: MainAppProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const [activeTab, setActiveTab] = useState<'architecture' | 'demo'>('architecture');
+  const [activeTab, setActiveTab] = useState<'architecture' | 'demo'>(initialTab);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
-      <Header onNavigate={onNavigate} />
+      <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
         <div className="text-center py-10">
