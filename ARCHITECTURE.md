@@ -4,7 +4,7 @@
 **Tech Stack:** React 19, Express 4, TypeScript, Vite, Tailwind CSS v4, Shadcn UI, TanStack Query, Zod, SQLite (better-sqlite3), Vitest
 **Architecture Pattern:** Clean Architecture + Hexagonal (Ports and Adapters), shared-schema multi-tenancy
 
-> Last verified: 54 tests passing, `npm run lint` clean. If code and this doc disagree, the code wins — then fix the doc.
+> Last verified: 84 tests passing (15 files), `npm run lint` clean. If code and this doc disagree, the code wins — then fix the doc.
 
 ---
 
@@ -38,12 +38,13 @@ project-root/
 │       ├── queue.ts                 # SQLite job queue + worker (email.send, backoff, dead-letter)
 │       └── observability.ts         # JSON logger, metrics, error-report hook
 ├── src/
-│   ├── components/                  # AuthRoute, MainApp, Header, Footer, ui/*
-│   ├── features/                    # auth/, users/, profile/ (API + context + pages)
-│   ├── lib/                         # axios (withCredentials), react-query, utils
-│   └── main.tsx / App.tsx           # ThemeProvider -> AuthProvider -> App
+│   ├── router.tsx                   # Real routes + guards (/login, /billing, /invite, …)
+│   ├── components/                  # MainApp, Header, Footer, ui/*
+│   ├── features/                    # auth/, users/, profile/, billing/ (API + pages)
+│   ├── lib/                         # axios (+upgrade interceptor), react-query, errors, utils
+│   └── main.tsx / App.tsx           # ThemeProvider -> AuthProvider -> RouterProvider
 ├── data/                            # RUNTIME, gitignored: app.db, outbox/, audit.log
-└── docs: ARCHITECTURE.md (this), CODE_REVIEW.md, SAAS_KICKOFF.md, SAAS_SCENARIO.md, USAGE.md
+└── docs: ARCHITECTURE.md (this), CODE_REVIEW.md, AUDIT.md, FRONTEND_AUDIT.md, SAAS_KICKOFF.md, SAAS_SCENARIO.md, BILLING.md, JOBS_MESSAGING.md, USAGE.md
 ```
 
 ---

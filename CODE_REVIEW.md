@@ -162,7 +162,7 @@ React → Express → Controller → Domain Service → Repository Interface →
 ### Remaining Issues
 - Controllers use arrow function class properties (prevents Express type inference)
 - `app.set('trust proxy', 1)` hardcoded rather than configurable
-- `AuthRoute.tsx` uses state-based routing instead of React Router
+- `AuthRoute.tsx` used state-based routing instead of React Router _(DONE Sept 2026: deleted; `src/router.tsx`)_
 - No route-level code splitting
 
 ---
@@ -180,7 +180,7 @@ React → Express → Controller → Domain Service → Repository Interface →
 - `withCredentials: true` for automatic cookie sending
 
 ### Issues
-- `AuthRoute.tsx` uses state-based routing — consider React Router
+- `AuthRoute.tsx` used state-based routing — DONE Sept 2026, see `src/router.tsx`
 - Error message extraction could be shared utility
 
 ---
@@ -267,7 +267,7 @@ The project is now significantly more secure against common OWASP Top 10 threats
 
 **Scope:** architecture / security / data-lifecycle only. Demo UI and docs drift intentionally untouched.
 
-## What changed (all live-verified + tested: 9 files, 54 tests)
+## What changed (all live-verified + tested; suite now 15 files / 84 tests — see ARCHITECTURE.md for the map)
 
 ### 1. SQLite + migrations replaced the JSON store (was: main remaining work)
 **Files:** `server/infrastructure/database.ts`, `server/infrastructure/db/migrate.ts`, `migrations/001_init.sql`, `Sqlite*` adapters, `server.ts`, `SharedUserRepository.ts`
@@ -312,4 +312,4 @@ The prod stage never ran `npm run build`, so `dist/` didn't exist. Now: full ins
 SDK-free client (`fetch` + HMAC, `server/infrastructure/billing.ts`), domain `BillingService` (sole subscription writer), migration `002_billing` (customer_ref, grace_until, webhook_events ledger). Webhook mounts `express.raw()` before `express.json()` (raw bytes required for HMAC) and handles checkout/sync/cancel/payment_failed/payment_succeeded with **first-wins idempotency** (replays 200 without re-applying). Checkout + customer-portal endpoints fail explicitly (501) when unconfigured. Dunning: `past_due` + 7-day grace via `Subscription.hasAccess()`, enforced by `requirePlan`, visible on `GET /subscription` (`access`, `graceUntil`, `hasPaymentMethod`). Unknown price ids never blind-change plans. Live-verified with locally-signed events: apply → duplicate → grace → 401 on tamper → 501 without key. Tests 58 → 73.
 
 ## 3. Docs caught up
-ARCHITECTURE (billing routes, prod image, 73 tests), USAGE (endpoints, Stripe env), KICKOFF checklist, README stats, AUDIT counts.
+ARCHITECTURE (billing routes, prod image, current test map), USAGE (endpoints, Stripe env), KICKOFF checklist, README stats, AUDIT counts.
