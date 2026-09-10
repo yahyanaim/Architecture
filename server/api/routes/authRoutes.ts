@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/AuthController';
 import { AuthService } from '../../domain/services/AuthService';
-import { userRepository, orgRepository, billingRepository, tokenStore, jobQueue } from '../../infrastructure/repositories/SharedUserRepository';
+import { userRepository, orgRepository, billingRepository, tokenStore, membershipRepository, jobQueue } from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
 import { loginAccountLimiter } from '../middleware/loginAccountLimiter';
@@ -36,7 +36,7 @@ const registerLimiter = rateLimit({
 
 // Session + single-use flows need the full port set (users, orgs,
 // subscriptions, tokens). Wired once here — the composition root for auth.
-const authService = new AuthService(userRepository, orgRepository, billingRepository, tokenStore);
+const authService = new AuthService(userRepository, orgRepository, billingRepository, tokenStore, undefined, membershipRepository);
 const requireActiveUser = createRequireActiveUser(userRepository);
 const authController = new AuthController(authService, jobQueue);
 

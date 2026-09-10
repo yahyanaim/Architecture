@@ -1,6 +1,7 @@
 import { SqliteUserRepository } from './SqliteUserRepository';
 import { SqliteTokenStore } from './SqliteTokenStore';
 import { SqliteBillingRepository } from './SqliteBillingRepository';
+import { SqliteMembershipRepository } from './SqliteMembershipRepository';
 import { LogMailer } from '../mailer';
 import { JobQueue } from '../queue';
 
@@ -22,6 +23,8 @@ export const tokenStore = new SqliteTokenStore();
 export const billingRepository = new SqliteBillingRepository();
 // Org + subscription share one class (both are tiny org-scoped lookups).
 export const orgRepository = billingRepository;
+export const subscriptionRepository = billingRepository;
+export const membershipRepository = new SqliteMembershipRepository();
 
 // Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox
 // pattern). For prod, implement `SmtpMailer`/provider client against the

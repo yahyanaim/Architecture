@@ -21,6 +21,7 @@ import { userRoutes } from './api/routes/userRoutes';
 import { authRoutes } from './api/routes/authRoutes';
 import { profileRoutes } from './api/routes/profileRoutes';
 import { billingRoutes, billingWebhook } from './api/routes/billingRoutes';
+import workspaceRoutes from './api/routes/workspaceRoutes';
 
 // ============================================================================
 // Express composition root. Middleware ORDER is the request lifecycle — each
@@ -83,6 +84,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/workspaces', workspaceRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

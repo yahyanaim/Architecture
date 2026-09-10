@@ -1,27 +1,26 @@
 import { IUserRepository } from '../interfaces/IUserRepository';
 import {
-  IOrganizationRepository, ISubscriptionRepository, ITokenStore, AuthTokenType,
+  IOrganizationRepository,
+  ISubscriptionRepository,
+  ITokenStore,
+  AuthTokenType,
 } from '../interfaces/ITenant';
+import { ITokenService, TokenPayload } from '../interfaces/ITokenService';
+import { IMembershipRepository } from '../interfaces/IMembershipRepository';
+import { defaultTokenService, JwtTokenService } from '../../infrastructure/security/JwtTokenService';
 import { User, UserRole } from '../entities/User';
 import { Organization } from '../entities/Organization';
 import { Subscription } from '../entities/Subscription';
+import { Membership } from '../entities/Membership';
 import { BusinessException } from '../exceptions/BusinessException';
 import { NotFoundException } from '../exceptions/NotFoundException';
-import { ITokenService } from '../interfaces/ITokenService';
-import { defaultTokenService, JwtTokenService } from '../../infrastructure/security/JwtTokenService';
 import {
-  ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS,
-} from '../../config/index';
-
-export interface AuthPayload {
-  userId: string;
-  email: string;
-  role: UserRole;
-  orgId: string;
-}
+  ACCESS_TOKEN_TTL,
+  REFRESH_TOKEN_TTL_DAYS,
+} from '../../config';
 
 export interface SessionTokens {
-  /** Short-lived JWT (minutes). Sent as httpOnly `access` cookie. */
+  /** Short-lived JWT (minutes). Stored in-memory or Authorization header. */
   access: string;
   /** Long-lived opaque token (days). Stored HASHED server-side, rotated on every use. */
   refresh: string;
@@ -60,7 +59,8 @@ export class AuthService {
     private readonly orgRepository: IOrganizationRepository,
     private readonly subscriptionRepository: ISubscriptionRepository,
     private readonly tokenStore: ITokenStore,
-    jwtSecretOrTokenService?: string | ITokenService
+    jwtSecretOrTokenService?: string | ITokenService,
+    private readonly membershipRepository?: IMembershipRepository
   ) {
     if (typeof jwtSecretOrTokenService === 'string') {
       this.tokenService = new JwtTokenService(jwtSecretOrTokenService);
@@ -96,6 +96,10 @@ export class AuthService {
     const user = await User.create(name, email, password, role);
     user.orgId = org.id;
     await this.userRepository.save(user);
+
+    if (this.membershipRepository) {
+      await this.membershipRepository.save(Membership.create(user.id, org.id, role === 'admin' ? 'admin' : 'user'));
+    }
 
     const tokens = await this.issueSession(user.id, user);
     const verifyToken = await this.mintAuthToken(user.id, 'verify', 24 * 3600_000, {});
@@ -251,6 +255,12 @@ export class AuthService {
     user.resetFailedAttempts();
     await this.userRepository.save(user);
     const org = await this.ensureOrg(user);
+    if (this.membershipRepository) {
+      const existingMem = await this.membershipRepository.findByUserAndOrg(user.id, org.id);
+      if (!existingMem) {
+        await this.membershipRepository.save(Membership.create(user.id, org.id, user.role));
+      }
+    }
     const tokens = await this.issueSession(user.id, user);
     return { user, org, tokens };
   }
@@ -272,7 +282,7 @@ export class AuthService {
   }
 
   /** Verifies a short-lived ACCESS token (used by middleware + tests). */
-  verifyToken(token: string): AuthPayload {
+  verifyToken(token: string): TokenPayload {
     try {
       const payload = this.tokenService.verifyAccessToken(token);
       return payload;
@@ -297,12 +307,23 @@ export class AuthService {
   /** Self-heal: legacy/imported users predating orgs get a personal org. */
   private async ensureOrg(user: User): Promise<Organization> {
     const existing = await this.orgRepository.findById(user.orgId);
-    if (existing) return existing;
+    if (existing) {
+      if (this.membershipRepository) {
+        const existingMem = await this.membershipRepository.findByUserAndOrg(user.id, existing.id);
+        if (!existingMem) {
+          await this.membershipRepository.save(Membership.create(user.id, existing.id, user.role));
+        }
+      }
+      return existing;
+    }
     const org = new Organization(globalThis.crypto.randomUUID(), `${user.name}'s workspace`, this.tokenService.slugify(user.name));
     await this.orgRepository.save(org);
     await this.subscriptionRepository.save(new Subscription(org.id, 'free', 'trialing'));
     user.orgId = org.id;
     await this.userRepository.save(user);
+    if (this.membershipRepository) {
+      await this.membershipRepository.save(Membership.create(user.id, org.id, user.role));
+    }
     return org;
   }
 }

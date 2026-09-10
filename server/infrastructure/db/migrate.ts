@@ -63,6 +63,30 @@ export function migrate(target: typeof db = db): void {
     console.log(`[migrate] applied ${version}`);
   }
 
+  // Backfill memberships for any existing users
+  const hasMemberships = target.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memberships'").get();
+  if (hasMemberships) {
+    const unlinked = target.prepare(`
+      SELECT u.id, u.org_id, u.role, u.created_at
+      FROM users u
+      LEFT JOIN memberships m ON u.id = m.user_id AND u.org_id = m.org_id
+      WHERE m.id IS NULL
+    `).all() as any[];
+
+    if (unlinked.length > 0) {
+      const insertMem = target.prepare(`
+        INSERT INTO memberships (id, user_id, org_id, role, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const txn = target.transaction(() => {
+        for (const u of unlinked) {
+          insertMem.run(uid(), u.id, u.org_id, u.role || 'user', u.created_at || now());
+        }
+      });
+      txn();
+    }
+  }
+
   importLegacyUsers(target);
 }
 

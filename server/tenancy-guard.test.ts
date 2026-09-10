@@ -143,6 +143,7 @@ describe('tenancy guard', () => {
       'userRoutes.ts': { scoped: true, reason: 'tenant admin console' },
       'profileRoutes.ts': { scoped: true, reason: 'self-service within caller tenant' },
       'billingRoutes.ts': { scoped: true, reason: 'reads caller subscription' },
+      'workspaceRoutes.ts': { scoped: true, reason: 'multi-workspace management for authenticated users' },
       'authRoutes.ts': { scoped: false, reason: 'pre-auth public flows (register/login/refresh/verify/reset/invite); me is identity-only' },
     };
 
