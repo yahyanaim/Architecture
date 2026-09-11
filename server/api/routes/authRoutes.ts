@@ -2,7 +2,16 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/AuthController';
 import { AuthService } from '../../domain/services/AuthService';
-import { userRepository, orgRepository, billingRepository, tokenStore, membershipRepository, jobQueue } from '../../infrastructure/repositories/SharedUserRepository';
+import {
+  userRepository,
+  orgRepository,
+  billingRepository,
+  tokenStore,
+  membershipRepository,
+  twoFactorRepository,
+  totpService,
+  jobQueue,
+} from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
 import { loginAccountLimiter } from '../middleware/loginAccountLimiter';
@@ -36,7 +45,16 @@ const registerLimiter = rateLimit({
 
 // Session + single-use flows need the full port set (users, orgs,
 // subscriptions, tokens). Wired once here — the composition root for auth.
-const authService = new AuthService(userRepository, orgRepository, billingRepository, tokenStore, undefined, membershipRepository);
+const authService = new AuthService(
+  userRepository,
+  orgRepository,
+  billingRepository,
+  tokenStore,
+  undefined,
+  membershipRepository,
+  twoFactorRepository,
+  totpService
+);
 const requireActiveUser = createRequireActiveUser(userRepository);
 const authController = new AuthController(authService, jobQueue);
 
@@ -46,6 +64,12 @@ router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 // `me` is liveness-checked so deleted/deactivated accounts can't poll it.
 router.get('/me', authenticate, requireActiveUser, authController.me);
+
+// Two-Factor Authentication (2FA / TOTP)
+router.post('/2fa/verify', authLimiter, authController.verify2Fa);
+router.post('/2fa/setup', authenticate, requireActiveUser, authController.setup2Fa);
+router.post('/2fa/enable', authenticate, requireActiveUser, authController.enable2Fa);
+router.post('/2fa/disable', authenticate, requireActiveUser, authController.disable2Fa);
 
 // Email verification (enumeration-safe: always 200, see service).
 router.post('/verify-request', authLimiter, authController.requestVerification);

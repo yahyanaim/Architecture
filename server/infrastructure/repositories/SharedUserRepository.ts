@@ -2,6 +2,10 @@ import { SqliteUserRepository } from './SqliteUserRepository';
 import { SqliteTokenStore } from './SqliteTokenStore';
 import { SqliteBillingRepository } from './SqliteBillingRepository';
 import { SqliteMembershipRepository } from './SqliteMembershipRepository';
+import { SqliteOutboxRepository } from './SqliteOutboxRepository';
+import { SqliteTwoFactorRepository } from './SqliteTwoFactorRepository';
+import { OutboxRelay } from '../outbox/OutboxRelay';
+import { defaultTotpService } from '../security/TotpService';
 import { LogMailer } from '../mailer';
 import { JobQueue } from '../queue';
 
@@ -25,6 +29,10 @@ export const billingRepository = new SqliteBillingRepository();
 export const orgRepository = billingRepository;
 export const subscriptionRepository = billingRepository;
 export const membershipRepository = new SqliteMembershipRepository();
+export const outboxRepository = new SqliteOutboxRepository();
+export const outboxRelay = new OutboxRelay(outboxRepository);
+export const twoFactorRepository = new SqliteTwoFactorRepository();
+export const totpService = defaultTotpService;
 
 // Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox
 // pattern). For prod, implement `SmtpMailer`/provider client against the
@@ -33,3 +41,4 @@ export const mailer = new LogMailer();
 
 // Durable job queue (SQLite `jobs` table). Worker started in `server.ts`.
 export const jobQueue = new JobQueue(mailer);
+

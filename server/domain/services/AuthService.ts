@@ -14,6 +14,9 @@ import { Subscription } from '../entities/Subscription';
 import { Membership } from '../entities/Membership';
 import { BusinessException } from '../exceptions/BusinessException';
 import { NotFoundException } from '../exceptions/NotFoundException';
+import { TwoFactorAuth } from '../entities/TwoFactorAuth';
+import { ITwoFactorRepository } from '../interfaces/ITwoFactorRepository';
+import { ITotpService } from '../interfaces/ITotpService';
 import {
   ACCESS_TOKEN_TTL,
   REFRESH_TOKEN_TTL_DAYS,
@@ -26,11 +29,15 @@ export interface SessionTokens {
   refresh: string;
 }
 
-export interface LoginResult {
+export interface AuthSuccessResult {
   user: User;
   org: Organization;
   tokens: SessionTokens;
 }
+
+export type LoginResult =
+  | { mfaRequired: true; mfaToken: string; user?: never; org?: never; tokens?: never }
+  | ({ mfaRequired?: false } & AuthSuccessResult);
 
 /** Parses '15m'/'2h'/'7d'/'30s' into ms for cookie maxAge. */
 export function parseTtlMs(ttl: string, fallbackMs: number): number {
@@ -60,7 +67,9 @@ export class AuthService {
     private readonly subscriptionRepository: ISubscriptionRepository,
     private readonly tokenStore: ITokenStore,
     jwtSecretOrTokenService?: string | ITokenService,
-    private readonly membershipRepository?: IMembershipRepository
+    private readonly membershipRepository?: IMembershipRepository,
+    private readonly twoFactorRepository?: ITwoFactorRepository,
+    private readonly totpService?: ITotpService
   ) {
     if (typeof jwtSecretOrTokenService === 'string') {
       this.tokenService = new JwtTokenService(jwtSecretOrTokenService);
@@ -80,7 +89,7 @@ export class AuthService {
   // row to read. Invited users skip this (they join the inviter's org).
   async register(
     name: string, email: string, password: string
-  ): Promise<LoginResult & { verifyToken: string }> {
+  ): Promise<AuthSuccessResult & { verifyToken: string }> {
     const existingUser = await this.userRepository.findByEmail(email);
     if (existingUser) {
       throw new BusinessException('User with this email already exists');
@@ -138,6 +147,153 @@ export class AuthService {
     user.resetFailedAttempts();
     await this.userRepository.save(user);
 
+    if (this.twoFactorRepository) {
+      const twoFactor = await this.twoFactorRepository.findByUserId(user.id);
+      if (twoFactor && twoFactor.isEnabled) {
+        const mfaToken = this.tokenService.signAccessToken({
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          orgId: user.orgId,
+          purpose: 'mfa',
+        });
+        return { mfaRequired: true, mfaToken };
+      }
+    }
+
+    const org = await this.ensureOrg(user);
+    const tokens = await this.issueSession(user.id, user, ip);
+    return { user, org, tokens };
+  }
+
+  // -- two-factor authentication (2FA / TOTP) ------------------------------
+  async setup2Fa(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
+    if (!this.twoFactorRepository || !this.totpService) {
+      throw new BusinessException('Two-factor authentication is not configured');
+    }
+
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const existing = await this.twoFactorRepository.findByUserId(userId);
+    if (existing && existing.isEnabled) {
+      throw new BusinessException('Two-factor authentication is already enabled');
+    }
+
+    const secret = this.totpService.generateSecret();
+    const uri = this.totpService.generateTotpUri(user.email, 'SaaS Architecture', secret);
+    const { plain, hashed } = this.totpService.generateRecoveryCodes();
+
+    const record = TwoFactorAuth.create(userId, secret, hashed);
+    await this.twoFactorRepository.save(record);
+
+    return { secret, uri, recoveryCodes: plain };
+  }
+
+  async enable2Fa(userId: string, code: string): Promise<void> {
+    if (!this.twoFactorRepository || !this.totpService) {
+      throw new BusinessException('Two-factor authentication is not configured');
+    }
+
+    const record = await this.twoFactorRepository.findByUserId(userId);
+    if (!record) {
+      throw new BusinessException('Please set up two-factor authentication before enabling');
+    }
+    if (record.isEnabled) {
+      throw new BusinessException('Two-factor authentication is already enabled');
+    }
+
+    const isValid = this.totpService.verifyToken(record.secret, code);
+    if (!isValid) {
+      throw new BusinessException('Invalid verification code');
+    }
+
+    record.isEnabled = true;
+    record.updatedAt = new Date();
+    await this.twoFactorRepository.save(record);
+  }
+
+  async disable2Fa(userId: string, password: string, code: string): Promise<void> {
+    if (!this.twoFactorRepository || !this.totpService) {
+      throw new BusinessException('Two-factor authentication is not configured');
+    }
+
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isValidPassword = await user.comparePassword(password);
+    if (!isValidPassword) {
+      throw new BusinessException('Invalid password');
+    }
+
+    const record = await this.twoFactorRepository.findByUserId(userId);
+    if (!record || !record.isEnabled) {
+      throw new BusinessException('Two-factor authentication is not enabled');
+    }
+
+    const isTotpValid = this.totpService.verifyToken(record.secret, code);
+    let isRecoveryValid = false;
+    if (!isTotpValid) {
+      const rec = this.totpService.verifyRecoveryCode(code, record.recoveryCodes);
+      isRecoveryValid = rec.valid;
+    }
+
+    if (!isTotpValid && !isRecoveryValid) {
+      throw new BusinessException('Invalid verification or recovery code');
+    }
+
+    await this.twoFactorRepository.delete(userId);
+  }
+
+  async verify2Fa(
+    mfaToken: string,
+    code: string,
+    ip?: string
+  ): Promise<{ user: User; org: Organization; tokens: SessionTokens }> {
+    if (!this.twoFactorRepository || !this.totpService) {
+      throw new BusinessException('Two-factor authentication is not configured');
+    }
+
+    let payload: TokenPayload;
+    try {
+      payload = this.tokenService.verifyAccessToken(mfaToken);
+    } catch {
+      throw new BusinessException('Invalid or expired 2FA session');
+    }
+
+    if (payload.purpose !== 'mfa' || !payload.userId) {
+      throw new BusinessException('Invalid 2FA session');
+    }
+
+    const user = await this.userRepository.findById(payload.userId);
+    if (!user || !user.isActive) {
+      throw new BusinessException('User not found or account is disabled');
+    }
+
+    const record = await this.twoFactorRepository.findByUserId(user.id);
+    if (!record || !record.isEnabled) {
+      throw new BusinessException('Two-factor authentication is not enabled');
+    }
+
+    let isValid = this.totpService.verifyToken(record.secret, code);
+    if (!isValid) {
+      const rec = this.totpService.verifyRecoveryCode(code, record.recoveryCodes);
+      if (rec.valid) {
+        isValid = true;
+        record.recoveryCodes = rec.remainingHashed;
+        record.updatedAt = new Date();
+        await this.twoFactorRepository.save(record);
+      }
+    }
+
+    if (!isValid) {
+      throw new BusinessException('Invalid two-factor code or recovery code');
+    }
+
     const org = await this.ensureOrg(user);
     const tokens = await this.issueSession(user.id, user, ip);
     return { user, org, tokens };
@@ -147,7 +303,7 @@ export class AuthService {
   // REUSE DETECTION: each refresh use revokes the old row and links the
   // replacement. Presenting an already-revoked token means it was stolen
   // (the legitimate client moved on) -> revoke the WHOLE chain immediately.
-  async refreshSession(refreshToken: string, ip?: string): Promise<LoginResult> {
+  async refreshSession(refreshToken: string, ip?: string): Promise<AuthSuccessResult> {
     const row = await this.tokenStore.findRefreshByHash(this.tokenService.hashToken(refreshToken));
     if (!row) throw new BusinessException('Invalid session');
     if (row.expiresAt.getTime() < Date.now()) throw new BusinessException('Session expired');
@@ -244,7 +400,7 @@ export class AuthService {
     return { user, inviteToken };
   }
 
-  async acceptInvite(token: string, password: string, name?: string): Promise<LoginResult> {
+  async acceptInvite(token: string, password: string, name?: string): Promise<AuthSuccessResult> {
     const row = await this.tokenStore.consumeAuthToken(this.tokenService.hashToken(token), 'invite');
     if (!row || !row.userId) throw new BusinessException('Invalid or expired invite link');
     const user = await this.userRepository.findById(row.userId);

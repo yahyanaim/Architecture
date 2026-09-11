@@ -99,10 +99,18 @@ export class AuthController {
       const { email, password } = parseResult.data;
       const result = await this.authService.login(email, password, req.ip);
 
-      this.setSession(res, result.tokens);
+      if (result.mfaRequired) {
+        res.status(200).json({
+          mfaRequired: true,
+          mfaToken: result.mfaToken,
+        });
+        return;
+      }
+
+      this.setSession(res, result.tokens!);
       res.status(200).json(toResponse(
-        result.user.id, result.user.name, result.user.email, result.user.role,
-        result.user.isVerified, result.org.id
+        result.user!.id, result.user!.name, result.user!.email, result.user!.role,
+        result.user!.isVerified, result.org!.id
       ));
     } catch (error) {
       next(error);
@@ -231,6 +239,76 @@ export class AuthController {
       const result = await this.authService.acceptInvite(parsed.data.token, parsed.data.password, parsed.data.name);
       this.setSession(res, result.tokens);
       audit('user.invite_accepted', result.user.id, { email: result.user.email, orgId: result.org.id });
+      res.status(200).json(toResponse(
+        result.user.id, result.user.name, result.user.email, result.user.role,
+        result.user.isVerified, result.org.id
+      ));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  setup2Fa = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const r = req as ActiveUserRequest;
+      if (!r.account) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+      const data = await this.authService.setup2Fa(r.account.id);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  enable2Fa = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const r = req as ActiveUserRequest;
+      if (!r.account) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+      const { code } = req.body || {};
+      if (!code || typeof code !== 'string') {
+        throw new ValidationException('Validation failed', { code: 'Verification code is required' });
+      }
+      await this.authService.enable2Fa(r.account.id, code);
+      audit('user.2fa_enabled', r.account.id, {});
+      res.json({ message: 'Two-factor authentication enabled successfully' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  disable2Fa = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const r = req as ActiveUserRequest;
+      if (!r.account) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+      const { password, code } = req.body || {};
+      if (!password || !code) {
+        throw new ValidationException('Validation failed', { error: 'Password and verification code are required' });
+      }
+      await this.authService.disable2Fa(r.account.id, password, code);
+      audit('user.2fa_disabled', r.account.id, {});
+      res.json({ message: 'Two-factor authentication disabled successfully' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  verify2Fa = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { mfaToken, code } = req.body || {};
+      if (!mfaToken || !code) {
+        throw new ValidationException('Validation failed', { error: 'mfaToken and code are required' });
+      }
+      const result = await this.authService.verify2Fa(mfaToken, code, req.ip);
+      this.setSession(res, result.tokens);
+      audit('user.2fa_login', result.user.id, {});
       res.status(200).json(toResponse(
         result.user.id, result.user.name, result.user.email, result.user.role,
         result.user.isVerified, result.org.id

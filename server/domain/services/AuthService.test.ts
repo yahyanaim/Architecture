@@ -127,6 +127,7 @@ describe('AuthService', () => {
       await authService.register('John Doe', 'john@example.com', 'Password123');
 
       const result = await authService.login('john@example.com', 'Password123');
+      if (result.mfaRequired) throw new Error('Did not expect MFA');
 
       expect(result.user.email).toBe('john@example.com');
       expect(result.tokens.access).toBeDefined();
@@ -234,6 +235,7 @@ describe('AuthService', () => {
       await expect(authService.login('john@example.com', 'Password123')).rejects.toThrow();
       await expect(authService.refreshSession(reg.tokens.refresh)).rejects.toThrow();
       const ok = await authService.login('john@example.com', 'NewPassword1');
+      if (ok.mfaRequired) throw new Error('Did not expect MFA');
       expect(ok.user.email).toBe('john@example.com');
     });
 
