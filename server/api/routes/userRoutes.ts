@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { UserController } from '../controllers/UserController';
 import { UserService } from '../../domain/services/UserService';
-import { userRepository, tokenStore, jobQueue } from '../../infrastructure/repositories/SharedUserRepository';
+import {
+  userRepository,
+  tokenStore,
+  membershipRepository,
+  jobQueue,
+} from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
 import { resolveTenant } from '../middleware/resolveTenant';
@@ -18,7 +23,7 @@ const router = Router();
 
 // 2. Instantiate the Service (Domain Layer)
 // Injecting the repository via constructor
-const userService = new UserService(userRepository, tokenStore);
+const userService = new UserService(userRepository, tokenStore, membershipRepository);
 
 // 2b. Session-liveness guard. `authenticate` verifies the JWT signature only;
 // `requireActiveUser` re-checks the account against the repository on every

@@ -33,18 +33,34 @@ export class UserController {
       }
 
       const dto = parseResult.data;
-      const { user, inviteToken } = await this.userService.createUser(dto.name, dto.email, tenantReq.tenant.orgId);
+      const { user, inviteToken, isExistingUser } = await this.userService.createUser(dto.name, dto.email, tenantReq.tenant.orgId);
 
-      this.jobQueue.enqueue(
-        'email.send',
-        {
-          to: user.email,
-          subject: `You've been invited to join ${tenantReq.account?.name ?? 'a workspace'}`,
-          text: `Hi ${user.name}, you've been invited. Set your password (valid 7 days): ${APP_URL}/invite?token=${inviteToken}`,
-          kind: 'invite',
-        }
-      ).catch(() => undefined);
-      audit('user.invited', tenantReq.account?.id ?? 'unknown', { targetUserId: user.id, orgId: tenantReq.tenant.orgId });
+      if (isExistingUser) {
+        this.jobQueue.enqueue(
+          'email.send',
+          {
+            to: user.email,
+            subject: `You've been added to ${tenantReq.account?.name ? `${tenantReq.account.name}'s workspace` : 'a new workspace'}`,
+            text: `Hi ${user.name}, you have been added to a new workspace. You can switch to it anytime from your workspace menu: ${APP_URL}`,
+            kind: 'invite',
+          }
+        ).catch(() => undefined);
+      } else {
+        this.jobQueue.enqueue(
+          'email.send',
+          {
+            to: user.email,
+            subject: `You've been invited to join ${tenantReq.account?.name ?? 'a workspace'}`,
+            text: `Hi ${user.name}, you've been invited. Set your password (valid 7 days): ${APP_URL}/invite?token=${inviteToken}`,
+            kind: 'invite',
+          }
+        ).catch(() => undefined);
+      }
+      audit('user.invited', tenantReq.account?.id ?? 'unknown', {
+        targetUserId: user.id,
+        orgId: tenantReq.tenant.orgId,
+        isExistingUser,
+      });
 
       const response: UserResponseDTO = {
         id: user.id,

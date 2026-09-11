@@ -39,7 +39,20 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
       return;
     }
 
-    const payload = jwt.verify(token, JWT_SECRET) as { userId: string; email: string; role: 'admin' | 'user'; orgId: string };
+    const payload = jwt.verify(token, JWT_SECRET) as {
+      userId: string;
+      email: string;
+      role: 'admin' | 'user';
+      orgId: string;
+      purpose?: string;
+    };
+
+    // Special-purpose tokens (e.g. 'mfa' pre-auth challenges) MUST NOT be accepted
+    // as full session credentials on protected routes.
+    if (payload.purpose) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
 
     (req as AuthRequest).user = payload;
     next();

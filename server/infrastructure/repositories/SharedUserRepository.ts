@@ -11,6 +11,9 @@ import { defaultTotpService } from '../security/TotpService';
 import { LogMailer } from '../mailer';
 import { JobQueue } from '../queue';
 
+import { PostgresUserRepository } from './PostgresUserRepository';
+import { PostgresBillingRepository } from './PostgresBillingRepository';
+
 /**
  * Infrastructure composition root (singletons).
  *
@@ -20,13 +23,21 @@ import { JobQueue } from '../queue';
  * and API layers stay untouched. `migrate()` runs separately at boot
  * (`server.ts`) so schema always precedes first use.
  *
+ * NOTE on runtime switching: If `DATABASE_URL` is set in environment,
+ * `userRepository` and `billingRepository` automatically switch to Neon/PostgreSQL
+ * adapters (`PostgresUserRepository`, `PostgresBillingRepository`).
+ *
  * NOTE on tests: `database.ts` opens `:memory:` under NODE_ENV=test, and
  * constructing these adapters performs no I/O, so importing this module in
  * tests is side-effect free.
  */
-export const userRepository = new SqliteUserRepository();
+export const userRepository = process.env.DATABASE_URL
+  ? new PostgresUserRepository()
+  : new SqliteUserRepository();
 export const tokenStore = new SqliteTokenStore();
-export const billingRepository = new SqliteBillingRepository();
+export const billingRepository = process.env.DATABASE_URL
+  ? new PostgresBillingRepository()
+  : new SqliteBillingRepository();
 // Org + subscription share one class (both are tiny org-scoped lookups).
 export const orgRepository = billingRepository;
 export const subscriptionRepository = billingRepository;
