@@ -4,6 +4,8 @@ import { SqliteBillingRepository } from './SqliteBillingRepository';
 import { SqliteMembershipRepository } from './SqliteMembershipRepository';
 import { SqliteOutboxRepository } from './SqliteOutboxRepository';
 import { SqliteTwoFactorRepository } from './SqliteTwoFactorRepository';
+import { SqliteApiKeyRepository } from './SqliteApiKeyRepository';
+import { SqliteAuditLogRepository } from './SqliteAuditLogRepository';
 import { OutboxRelay } from '../outbox/OutboxRelay';
 import { defaultTotpService } from '../security/TotpService';
 import { LogMailer } from '../mailer';
@@ -33,6 +35,8 @@ export const outboxRepository = new SqliteOutboxRepository();
 export const outboxRelay = new OutboxRelay(outboxRepository);
 export const twoFactorRepository = new SqliteTwoFactorRepository();
 export const totpService = defaultTotpService;
+export const apiKeyRepository = new SqliteApiKeyRepository();
+export const auditLogRepository = new SqliteAuditLogRepository();
 
 // Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox
 // pattern). For prod, implement `SmtpMailer`/provider client against the

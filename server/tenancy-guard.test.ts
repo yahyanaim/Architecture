@@ -57,6 +57,11 @@ const SQL_ALLOWLIST: Allowance[] = [
     match: 'select * from subscriptions where provider_ref = ?',
     reason: 'WEBHOOK REVERSE LOOKUP: Stripe sends subscription id, not org. Called only post-HMAC from webhook handlers; keyed by unguessable provider id, single row, no listing.',
   },
+  {
+    file: 'SqliteApiKeyRepository.ts',
+    match: 'select * from api_keys where key_hash = ?',
+    reason: 'GLOBAL KEY LOOKUP: API key bearer auth finds credential by SHA-256 hash before tenant hydration.',
+  },
 ];
 
 function tenantTables(): Set<string> {
@@ -144,6 +149,8 @@ describe('tenancy guard', () => {
       'profileRoutes.ts': { scoped: true, reason: 'self-service within caller tenant' },
       'billingRoutes.ts': { scoped: true, reason: 'reads caller subscription' },
       'workspaceRoutes.ts': { scoped: true, reason: 'multi-workspace management for authenticated users' },
+      'apiKeyRoutes.ts': { scoped: true, reason: 'developer api key management scoped to caller workspace' },
+      'auditLogRoutes.ts': { scoped: true, reason: 'admin audit log viewing scoped to caller workspace' },
       'authRoutes.ts': { scoped: false, reason: 'pre-auth public flows (register/login/refresh/verify/reset/invite); me is identity-only' },
     };
 

@@ -13,6 +13,10 @@ import { membershipRepository } from '../../infrastructure/repositories/SharedUs
  * active_org_id cookie), verifies the caller has an active Membership in that
  * workspace, overriding the default tenant for the request.
  */
+export interface TenantRequest extends ActiveUserRequest {
+  tenant: { orgId: string };
+}
+
 export async function resolveTenant(req: Request, res: Response, next: NextFunction): Promise<void> {
   const r = req as ActiveUserRequest;
   if (!r.account) {
