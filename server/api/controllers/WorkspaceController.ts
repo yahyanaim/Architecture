@@ -6,6 +6,7 @@ import { Organization } from '../../domain/entities/Organization';
 import { Subscription } from '../../domain/entities/Subscription';
 import { Membership } from '../../domain/entities/Membership';
 import { ValidationException } from '../../domain/exceptions/ValidationException';
+import { ITokenService } from '../../domain/interfaces/ITokenService';
 import { defaultTokenService } from '../../infrastructure/security/JwtTokenService';
 import { audit } from '../../infrastructure/audit';
 
@@ -13,7 +14,8 @@ export class WorkspaceController {
   constructor(
     private readonly membershipRepository: IMembershipRepository,
     private readonly orgRepository: IOrganizationRepository,
-    private readonly subscriptionRepository: ISubscriptionRepository
+    private readonly subscriptionRepository: ISubscriptionRepository,
+    private readonly tokenService: ITokenService = defaultTokenService
   ) {}
 
   listWorkspaces = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -56,7 +58,7 @@ export class WorkspaceController {
       }
 
       const cleanName = name.trim();
-      const slug = defaultTokenService.slugify(cleanName);
+      const slug = this.tokenService.slugify(cleanName);
       const orgId = globalThis.crypto.randomUUID();
 
       const org = new Organization(orgId, cleanName, slug, 'free', 'active', new Date());

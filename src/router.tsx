@@ -41,8 +41,8 @@ const ResetPasswordPage = lazy(() =>
 
 function Loading() {
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-black font-medium">Loading...</div>
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="text-foreground font-medium">Loading...</div>
     </div>
   );
 }

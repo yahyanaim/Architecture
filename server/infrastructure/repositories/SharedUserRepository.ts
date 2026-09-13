@@ -10,9 +10,20 @@ import { OutboxRelay } from '../outbox/OutboxRelay';
 import { defaultTotpService } from '../security/TotpService';
 import { LogMailer } from '../mailer';
 import { JobQueue } from '../queue';
+import { defaultPasswordHasher } from '../security/BcryptPasswordHasher';
+import { defaultTokenService } from '../security/JwtTokenService';
+import { User } from '../../domain/entities/User';
+import { AuthService } from '../../domain/services/AuthService';
 
 import { PostgresUserRepository } from './PostgresUserRepository';
 import { PostgresBillingRepository } from './PostgresBillingRepository';
+
+// Initialize default domain ports in composition root
+User.setDefaultHasher(defaultPasswordHasher);
+AuthService.setDefaultTokenService(defaultTokenService);
+
+export const passwordHasher = defaultPasswordHasher;
+export const tokenService = defaultTokenService;
 
 /**
  * Infrastructure composition root (singletons).
@@ -26,6 +37,19 @@ import { PostgresBillingRepository } from './PostgresBillingRepository';
  * NOTE on runtime switching: If `DATABASE_URL` is set in environment,
  * `userRepository` and `billingRepository` automatically switch to Neon/PostgreSQL
  * adapters (`PostgresUserRepository`, `PostgresBillingRepository`).
+ *
+ * TODO (Production Postgres Migration):
+ * Currently, only `userRepository` and `billingRepository` have PostgreSQL adapter
+ * implementations. When `DATABASE_URL` is set, `tokenStore`, `membershipRepository`,
+ * `apiKeyRepository`, `auditLogRepository`, and `outboxRepository` continue to use
+ * SQLite adapters. Before running fully distributed in production across multiple
+ * containers without a local SQLite dependency, Postgres implementations must be
+ * created for these remaining repositories:
+ * - PostgresTokenStore
+ * - PostgresMembershipRepository
+ * - PostgresApiKeyRepository
+ * - PostgresAuditLogRepository
+ * - PostgresOutboxRepository
  *
  * NOTE on tests: `database.ts` opens `:memory:` under NODE_ENV=test, and
  * constructing these adapters performs no I/O, so importing this module in

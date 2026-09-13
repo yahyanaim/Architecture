@@ -46,14 +46,14 @@ export class PostgresBillingRepository implements IOrganizationRepository, ISubs
     const res = await this.db.query<OrgRow>('SELECT * FROM organizations WHERE id = $1', [id]);
     if (!res.rows[0]) return null;
     const r = res.rows[0];
-    return new Organization(r.id, r.name, r.slug, r.plan, r.status as OrgStatus, new Date(r.created_at));
+    return new Organization(r.id, r.name, r.slug, r.plan as Plan, r.status as OrgStatus, new Date(r.created_at));
   }
 
   async findBySlug(slug: string): Promise<Organization | null> {
     const res = await this.db.query<OrgRow>('SELECT * FROM organizations WHERE slug = $1', [slug]);
     if (!res.rows[0]) return null;
     const r = res.rows[0];
-    return new Organization(r.id, r.name, r.slug, r.plan, r.status as OrgStatus, new Date(r.created_at));
+    return new Organization(r.id, r.name, r.slug, r.plan as Plan, r.status as OrgStatus, new Date(r.created_at));
   }
 
   async save(org: Organization): Promise<void>;

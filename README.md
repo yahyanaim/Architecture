@@ -16,7 +16,7 @@ A clean, full-stack setup with React and Node. Built with Clean Architecture and
 - **Enhanced Security**: Helmet (CSP), CORS with allowlist, rate limiting, account lockout, JWT required at startup in prod.
 - **Type-safe**: Zod for validation on both ends, strict TypeScript mode.
 - **Modern UI**: React 19, Tailwind 4, Shadcn, and TanStack Query.
-- **Tested**: 84 tests (services, middleware, tripwire, adapters, billing, router, forms, queue). Full map in [ARCHITECTURE.md](./ARCHITECTURE.md).
+- **Tested**: 92 tests (services, middleware, tripwire, adapters, billing, router, forms, queue). Full map in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Enterprise Architecture Blueprint
 
@@ -122,7 +122,7 @@ npm run test:coverage
 
 ## Project Stats
 
-- **84 tests passing** (services, middleware, tripwire, adapters, billing, router, forms, queue)
+- **92 tests passing** (services, middleware, tripwire, adapters, billing, router, forms, queue)
 - **Strict TypeScript** with full type safety
 - **Lint passing** with no errors
 - **New here?** AI agents: read [SAAS_KICKOFF.md](./SAAS_KICKOFF.md) first. Humans: [SAAS_SCENARIO.md](./SAAS_SCENARIO.md) walks a full SaaS build on this base.

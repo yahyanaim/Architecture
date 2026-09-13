@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService, ACCESS_COOKIE_MAX_AGE_MS, REFRESH_COOKIE_MAX_AGE_MS, SessionTokens } from '../../domain/services/AuthService';
+import { AuthService, SessionTokens } from '../../domain/services/AuthService';
 import { ActiveUserRequest } from '../middleware/requireActiveUser';
 import {
   RegisterSchema, LoginSchema, EmailRequestSchema, ResetPasswordSchema, InviteAcceptSchema,
@@ -8,14 +8,14 @@ import {
 import { ValidationException } from '../../domain/exceptions/ValidationException';
 import { audit } from '../../infrastructure/audit';
 import { JobQueue } from '../../infrastructure/queue';
-import { APP_URL } from '../../config/index';
+import { APP_URL, IS_PROD, ACCESS_COOKIE_MAX_AGE_MS, REFRESH_COOKIE_MAX_AGE_MS } from '../../config/index';
 
 // Cookie lifecycle: short-lived `access` JWT + long-lived opaque `refresh`.
 // Both httpOnly (never JS-readable), `secure` in prod, `sameSite: lax`.
 // Flags must match between set and clear or browsers keep the cookie.
 const ACCESS_COOKIE = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: IS_PROD,
   sameSite: 'lax' as const,
   maxAge: ACCESS_COOKIE_MAX_AGE_MS,
   path: '/',
@@ -23,7 +23,7 @@ const ACCESS_COOKIE = {
 
 const REFRESH_COOKIE = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: IS_PROD,
   sameSite: 'lax' as const,
   maxAge: REFRESH_COOKIE_MAX_AGE_MS,
   path: '/',
@@ -31,7 +31,7 @@ const REFRESH_COOKIE = {
 
 const CLEAR_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: IS_PROD,
   sameSite: 'lax' as const,
   path: '/',
 };

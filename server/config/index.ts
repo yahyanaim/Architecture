@@ -27,6 +27,18 @@ export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d';
 export const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_TTL || '15m';
 export const REFRESH_TOKEN_TTL_DAYS = parseInt(process.env.REFRESH_TOKEN_TTL_DAYS || '30', 10);
 
+/** Parses '15m'/'2h'/'7d'/'30s' into ms for cookie maxAge. */
+export function parseTtlMs(ttl: string, fallbackMs: number): number {
+  const m = /^(\d+)(s|m|h|d)$/.exec(ttl.trim());
+  if (!m || !m[1] || !m[2]) return fallbackMs;
+  const n = parseInt(m[1], 10);
+  const unit = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'];
+  return n * unit;
+}
+
+export const ACCESS_COOKIE_MAX_AGE_MS = parseTtlMs(ACCESS_TOKEN_TTL, 15 * 60_000);
+export const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_DAYS * 86_400_000;
+
 // Public base URL used to build email links (verify / reset / invite).
 export const APP_URL = process.env.APP_URL || 'http://localhost:40001';
 

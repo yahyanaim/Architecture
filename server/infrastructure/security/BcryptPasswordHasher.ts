@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { IPasswordHasher } from '../../domain/interfaces/IPasswordHasher';
+import { User } from '../../domain/entities/User';
 
 export class BcryptPasswordHasher implements IPasswordHasher {
   constructor(private readonly saltRounds = 10) {}
@@ -14,3 +15,4 @@ export class BcryptPasswordHasher implements IPasswordHasher {
 }
 
 export const defaultPasswordHasher = new BcryptPasswordHasher();
+User.setDefaultHasher(defaultPasswordHasher);

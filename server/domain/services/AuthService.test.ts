@@ -7,6 +7,7 @@ import {
 } from '../../domain/interfaces/ITenant';
 import { Organization } from '../../domain/entities/Organization';
 import { Subscription, Plan, SubscriptionStatus } from '../../domain/entities/Subscription';
+import { JwtTokenService } from '../../infrastructure/security/JwtTokenService';
 import crypto from 'crypto';
 
 // Test doubles for the new ports (orgs, subscriptions, tokens). Kept here —
@@ -97,7 +98,7 @@ describe('AuthService', () => {
     orgs = new MemOrgs();
     subs = new MemSubs();
     tokens = new MemTokens();
-    authService = new AuthService(userRepository, orgs, subs, tokens, testSecret);
+    authService = new AuthService(userRepository, orgs, subs, tokens, new JwtTokenService(testSecret));
   });
 
   describe('register', () => {

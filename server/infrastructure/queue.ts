@@ -24,9 +24,6 @@ export interface EmailJobPayload extends Email {
 function now(): string {
   return new Date().toISOString();
 }
-function uid(): string {
-  return crypto.randomUUID();
-}
 
 export class JobQueue {
   private timer: NodeJS.Timeout | null = null;

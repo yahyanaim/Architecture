@@ -148,7 +148,10 @@ if (IS_PROD) {
   const distDir = path.resolve(process.cwd(), 'dist');
   if (fs.existsSync(distDir)) {
     app.use(express.static(distDir));
-    app.get('*', (_req, res) => {
+    // SPA fallback: serve index.html for non-API paths only. API routes
+    // that don't match any handler must fall through to errorHandler (404),
+    // not silently return the SPA shell with status 200.
+    app.get(/^(?!\/api\/).*/, (_req, res) => {
       res.sendFile(path.join(distDir, 'index.html'));
     });
   }

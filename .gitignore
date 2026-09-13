@@ -15,3 +15,5 @@ data/users.json*
 data/*.db
 data/*.db-*
 data/outbox/
+# Audit log: contains PII (user IDs, emails, event data). Per-environment.
+data/audit.log

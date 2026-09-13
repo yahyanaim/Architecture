@@ -1,5 +1,4 @@
 import { IPasswordHasher } from '../interfaces/IPasswordHasher';
-import { defaultPasswordHasher } from '../../infrastructure/security/BcryptPasswordHasher';
 
 export type UserRole = 'admin' | 'user';
 
@@ -8,8 +7,8 @@ export class User {
   // - `password` is ALWAYS a bcrypt hash here; plaintext never touches the
   //   entity (hashing happens in `create()`/`hashPassword()` before storage).
   // - `failedLoginAttempts`/`lockedUntil` are the brute-force throttle state
-  //   machine: N failures -> lock until T. `isLocked()` self-heals (clears an
-  //   expired lock) so reads never leave stale lock state behind.
+  //   machine: N failures -> lock until T. `isLocked()` is a pure query;
+  //   expired lock clearing is handled via `clearExpiredLock()`.
   // - `isActive=false` means administratively disabled: login refuses it and
   //   `requireActiveUser` rejects its tokens. The entity itself stays dumb —
   //   enforcement lives in services/middleware, not in field setters.
@@ -18,6 +17,24 @@ export class User {
   // - `emailVerifiedAt=null` means unverified. Verification is enforced
   //   opt-in via `requireVerified` (not on login) so legacy accounts and the
   //   invite flow never hard-lock during rollout.
+
+  private static defaultHasher: IPasswordHasher | null = null;
+
+  /** Sets the default password hasher port implementation from the composition root. */
+  static setDefaultHasher(hasher: IPasswordHasher): void {
+    User.defaultHasher = hasher;
+  }
+
+  private static getHasher(hasher?: IPasswordHasher): IPasswordHasher {
+    const active = hasher ?? User.defaultHasher;
+    if (!active) {
+      throw new Error(
+        'IPasswordHasher port not configured. Either pass a hasher argument or call User.setDefaultHasher() in composition root.'
+      );
+    }
+    return active;
+  }
+
   constructor(
     public readonly id: string,
     public name: string,
@@ -41,9 +58,10 @@ export class User {
     email: string,
     password: string,
     role: UserRole = 'user',
-    hasher: IPasswordHasher = defaultPasswordHasher
+    hasher?: IPasswordHasher
   ): Promise<User> {
-    const hashedPassword = await hasher.hash(password);
+    const activeHasher = User.getHasher(hasher);
+    const hashedPassword = await activeHasher.hash(password);
     const id = globalThis.crypto.randomUUID();
     return new User(id, name, email, hashedPassword, new Date(), true, role);
   }
@@ -56,12 +74,12 @@ export class User {
     this.emailVerifiedAt = new Date();
   }
 
-  static async hashPassword(password: string, hasher: IPasswordHasher = defaultPasswordHasher): Promise<string> {
-    return hasher.hash(password);
+  static async hashPassword(password: string, hasher?: IPasswordHasher): Promise<string> {
+    return User.getHasher(hasher).hash(password);
   }
 
-  async comparePassword(password: string, hasher: IPasswordHasher = defaultPasswordHasher): Promise<boolean> {
-    return hasher.compare(password, this.password);
+  async comparePassword(password: string, hasher?: IPasswordHasher): Promise<boolean> {
+    return User.getHasher(hasher).compare(password, this.password);
   }
 
   changeName(newName: string) {
@@ -75,14 +93,20 @@ export class User {
     this.isActive = !this.isActive;
   }
 
-  isLocked(): boolean {
+  /** Pure query: checks if the user account is locked at the given timestamp. */
+  isLocked(at: Date = new Date()): boolean {
     if (!this.lockedUntil) return false;
-    if (new Date() > this.lockedUntil) {
+    return at <= this.lockedUntil;
+  }
+
+  /** Command: clears expired lock state. Returns true if an expired lock was cleared. */
+  clearExpiredLock(at: Date = new Date()): boolean {
+    if (this.lockedUntil && at > this.lockedUntil) {
       this.lockedUntil = null;
       this.failedLoginAttempts = 0;
-      return false;
+      return true;
     }
-    return true;
+    return false;
   }
 
   recordFailedAttempt(): void {

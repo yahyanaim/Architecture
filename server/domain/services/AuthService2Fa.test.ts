@@ -14,6 +14,7 @@ import { TwoFactorAuth } from '../entities/TwoFactorAuth';
 import { TotpService } from '../../infrastructure/security/TotpService';
 import { Organization } from '../../domain/entities/Organization';
 import { Subscription } from '../../domain/entities/Subscription';
+import { JwtTokenService } from '../../infrastructure/security/JwtTokenService';
 import crypto from 'crypto';
 
 class MemOrgs implements IOrganizationRepository {
@@ -94,7 +95,7 @@ describe('AuthService Two-Factor Authentication (2FA)', () => {
       new MemOrgs(),
       new MemSubs(),
       new MemTokens(),
-      'test-secret-at-least-32-chars-long-here',
+      new JwtTokenService('test-secret-at-least-32-chars-long-here'),
       undefined,
       twoFactorRepo,
       totpService

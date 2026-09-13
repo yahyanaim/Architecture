@@ -7,7 +7,6 @@ import {
 } from '../interfaces/ITenant';
 import { ITokenService, TokenPayload } from '../interfaces/ITokenService';
 import { IMembershipRepository } from '../interfaces/IMembershipRepository';
-import { defaultTokenService, JwtTokenService } from '../../infrastructure/security/JwtTokenService';
 import { User, UserRole } from '../entities/User';
 import { Organization } from '../entities/Organization';
 import { Subscription } from '../entities/Subscription';
@@ -17,10 +16,6 @@ import { NotFoundException } from '../exceptions/NotFoundException';
 import { TwoFactorAuth } from '../entities/TwoFactorAuth';
 import { ITwoFactorRepository } from '../interfaces/ITwoFactorRepository';
 import { ITotpService } from '../interfaces/ITotpService';
-import {
-  ACCESS_TOKEN_TTL,
-  REFRESH_TOKEN_TTL_DAYS,
-} from '../../config';
 
 export interface SessionTokens {
   /** Short-lived JWT (minutes). Stored in-memory or Authorization header. */
@@ -39,18 +34,6 @@ export type LoginResult =
   | { mfaRequired: true; mfaToken: string; user?: never; org?: never; tokens?: never }
   | ({ mfaRequired?: false } & AuthSuccessResult);
 
-/** Parses '15m'/'2h'/'7d'/'30s' into ms for cookie maxAge. */
-export function parseTtlMs(ttl: string, fallbackMs: number): number {
-  const m = /^(\d+)(s|m|h|d)$/.exec(ttl.trim());
-  if (!m || !m[1] || !m[2]) return fallbackMs;
-  const n = parseInt(m[1], 10);
-  const unit = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as 's' | 'm' | 'h' | 'd'];
-  return n * unit;
-}
-
-export const ACCESS_COOKIE_MAX_AGE_MS = parseTtlMs(ACCESS_TOKEN_TTL, 15 * 60_000);
-export const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_DAYS * 86_400_000;
-
 /**
  * Auth domain service. Owns identity lifecycle: registration (with workspace
  * bootstrap), login, refresh rotation, verification, password reset, invites.
@@ -59,25 +42,35 @@ export const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_TOKEN_TTL_DAYS * 86_400_000;
  * API layer to enqueue; the service never sends mail itself.
  */
 export class AuthService {
+  private static defaultTokenService: ITokenService | null = null;
+
+  /** Sets the default token service port implementation from the composition root. */
+  static setDefaultTokenService(service: ITokenService): void {
+    AuthService.defaultTokenService = service;
+  }
+
   private readonly tokenService: ITokenService;
+  private readonly refreshTokenTtlDays: number;
 
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly orgRepository: IOrganizationRepository,
     private readonly subscriptionRepository: ISubscriptionRepository,
     private readonly tokenStore: ITokenStore,
-    jwtSecretOrTokenService?: string | ITokenService,
+    tokenService?: ITokenService,
     private readonly membershipRepository?: IMembershipRepository,
     private readonly twoFactorRepository?: ITwoFactorRepository,
-    private readonly totpService?: ITotpService
+    private readonly totpService?: ITotpService,
+    refreshTokenTtlDays: number = 30
   ) {
-    if (typeof jwtSecretOrTokenService === 'string') {
-      this.tokenService = new JwtTokenService(jwtSecretOrTokenService);
-    } else if (jwtSecretOrTokenService) {
-      this.tokenService = jwtSecretOrTokenService;
-    } else {
-      this.tokenService = defaultTokenService;
+    const activeTokenService = tokenService ?? AuthService.defaultTokenService;
+    if (!activeTokenService) {
+      throw new Error(
+        'ITokenService port not configured. Either pass tokenService to constructor or call AuthService.setDefaultTokenService() in composition root.'
+      );
     }
+    this.tokenService = activeTokenService;
+    this.refreshTokenTtlDays = refreshTokenTtlDays;
   }
 
   // -- registration -------------------------------------------------------
@@ -130,6 +123,10 @@ export class AuthService {
 
     if (!user.isActive) {
       throw new BusinessException('Account is disabled');
+    }
+
+    if (user.clearExpiredLock()) {
+      await this.userRepository.save(user);
     }
 
     if (user.isLocked()) {
@@ -431,7 +428,7 @@ export class AuthService {
     await this.tokenStore.createRefresh({
       userId: account.id,
       tokenHash: this.tokenService.hashToken(refresh),
-      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 86_400_000),
+      expiresAt: new Date(Date.now() + this.refreshTokenTtlDays * 86_400_000),
       ip,
     });
     return { access, refresh };

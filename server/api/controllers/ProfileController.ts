@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { ProfileService } from '../../domain/services/ProfileService';
-import { AuthService, ACCESS_COOKIE_MAX_AGE_MS, REFRESH_COOKIE_MAX_AGE_MS } from '../../domain/services/AuthService';
+import { AuthService } from '../../domain/services/AuthService';
 import { ActiveUserRequest } from '../middleware/requireActiveUser';
 import { UpdateProfileSchema, ChangePasswordSchema, ProfileResponseDTO } from '../dtos/ProfileDTO';
 import { ValidationException } from '../../domain/exceptions/ValidationException';
 import { audit } from '../../infrastructure/audit';
+import { ACCESS_COOKIE_MAX_AGE_MS, REFRESH_COOKIE_MAX_AGE_MS, IS_PROD } from '../../config/index';
 
 export class ProfileController {
   // `authService` is used ONLY to mint the caller's replacement session after
@@ -97,7 +98,7 @@ export class ProfileController {
       // caller's replacement pair so they stay logged in; every other device
       // must re-authenticate.
       const tokens = await this.authService.issueSession(authReq.user.userId, authReq.account ?? null, req.ip);
-      const base = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/' };
+      const base = { httpOnly: true, secure: IS_PROD, sameSite: 'lax' as const, path: '/' };
       res.cookie('access', tokens.access, { ...base, maxAge: ACCESS_COOKIE_MAX_AGE_MS });
       res.cookie('refresh', tokens.refresh, { ...base, maxAge: REFRESH_COOKIE_MAX_AGE_MS });
 

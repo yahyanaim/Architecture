@@ -5,6 +5,7 @@ import {
   orgRepository,
   subscriptionRepository,
   userRepository,
+  tokenService,
 } from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
@@ -15,7 +16,8 @@ const requireActiveUser = createRequireActiveUser(userRepository);
 const workspaceController = new WorkspaceController(
   membershipRepository,
   orgRepository,
-  subscriptionRepository
+  subscriptionRepository,
+  tokenService
 );
 
 router.get('/', authenticate, requireActiveUser, resolveTenant, workspaceController.listWorkspaces);
