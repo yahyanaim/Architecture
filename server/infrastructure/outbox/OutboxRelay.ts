@@ -32,7 +32,16 @@ export class OutboxRelay {
         if (!acquired) continue;
 
         try {
-          const listeners = this.handlers.get(event.eventType) || [];
+          const listeners: OutboxHandler[] = [];
+          for (const [pattern, handlers] of this.handlers.entries()) {
+            if (
+              pattern === '*' ||
+              pattern === event.eventType ||
+              (pattern.endsWith('.*') && event.eventType.startsWith(pattern.slice(0, -1)))
+            ) {
+              listeners.push(...handlers);
+            }
+          }
           for (const handler of listeners) {
             await handler(event);
           }

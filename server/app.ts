@@ -26,6 +26,7 @@ import { billingRoutes, billingWebhook } from './api/routes/billingRoutes';
 import workspaceRoutes from './api/routes/workspaceRoutes';
 import { apiKeyRoutes } from './api/routes/apiKeyRoutes';
 import { auditLogRoutes } from './api/routes/auditLogRoutes';
+import { webhookRoutes } from './api/routes/webhookRoutes';
 import { idempotency } from './api/middleware/idempotency';
 import { db } from './infrastructure/database';
 
@@ -109,6 +110,7 @@ v1Router.use('/billing', billingRoutes);
 v1Router.use('/workspaces', workspaceRoutes);
 v1Router.use('/api-keys', apiKeyRoutes);
 v1Router.use('/admin/audit-logs', auditLogRoutes);
+v1Router.use('/webhooks', webhookRoutes);
 
 // Cloud Health Probes (Kubernetes / ECS / Cloud Run)
 const liveHealthHandler = (_req: express.Request, res: express.Response) => {

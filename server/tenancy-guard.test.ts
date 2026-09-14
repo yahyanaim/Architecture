@@ -166,6 +166,7 @@ describe('tenancy guard', () => {
       'workspaceRoutes.ts': { scoped: true, reason: 'multi-workspace management for authenticated users' },
       'apiKeyRoutes.ts': { scoped: true, reason: 'developer api key management scoped to caller workspace' },
       'auditLogRoutes.ts': { scoped: true, reason: 'admin audit log viewing scoped to caller workspace' },
+      'webhookRoutes.ts': { scoped: true, reason: 'customer webhook endpoint management and deliveries scoped to caller workspace' },
       'authRoutes.ts': { scoped: false, reason: 'pre-auth public flows (register/login/refresh/verify/reset/invite); me is identity-only' },
     };
 

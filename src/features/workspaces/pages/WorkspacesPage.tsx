@@ -6,6 +6,7 @@ import {
   CreateWorkspaceDTO,
   InviteMemberDTO,
 } from '../api/workspacesApi';
+import { WorkspaceWebhooksSection } from '../components/WorkspaceWebhooksSection';
 import { setActiveOrgId } from '@/lib/axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -330,6 +331,8 @@ export function WorkspacesPage() {
           </Card>
         ))}
       </div>
+
+      <WorkspaceWebhooksSection />
     </div>
   );
 }

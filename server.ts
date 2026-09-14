@@ -5,7 +5,7 @@ import { migrate } from "./server/infrastructure/db/migrate";
 import { migratePg } from "./server/infrastructure/db/migratePg";
 import { closePgPool } from "./server/infrastructure/pg";
 import { closeRedis } from "./server/infrastructure/redis";
-import { jobQueue } from "./server/infrastructure/repositories/SharedUserRepository";
+import { jobQueue, outboxRelay } from "./server/infrastructure/repositories/SharedUserRepository";
 import { logger } from "./server/infrastructure/observability";
 
 // Process entry point (dev vs prod lifecycle):
@@ -27,6 +27,7 @@ async function startServer() {
   // cleanly; the timer is `unref`'d so it never holds the process open alone.
   if (process.env.NODE_ENV !== 'test') {
     jobQueue.startWorker();
+    outboxRelay.start();
   }
 
   if (!IS_PROD) {
@@ -50,6 +51,7 @@ async function startServer() {
   // Graceful shutdown: stop timers so in-flight jobs finish draining.
   const shutdown = async () => {
     jobQueue.stopWorker();
+    outboxRelay.stop();
     if (DATABASE_URL) {
       await closePgPool().catch(() => {});
     }
