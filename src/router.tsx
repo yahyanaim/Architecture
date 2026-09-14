@@ -13,6 +13,7 @@ import { RegisterPage } from '@/features/auth/pages/RegisterPage';
 import { UPGRADE_REQUIRED_EVENT } from '@/lib/axios';
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { Forbidden403 } from '@/components/Forbidden403';
 
 // Route-level code splitting: each page is its own chunk so the initial
 // load is just shell + MainApp. Named exports need the default remap.
@@ -31,6 +32,30 @@ const InvitePage = lazy(() =>
 const ResetPasswordPage = lazy(() =>
   import('@/features/auth/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage }))
 );
+const WorkspacesPage = lazy(() =>
+  import('@/features/workspaces/pages/WorkspacesPage').then((m) => ({ default: m.WorkspacesPage }))
+);
+const ApiKeysPage = lazy(() =>
+  import('@/features/api-keys/pages/ApiKeysPage').then((m) => ({ default: m.ApiKeysPage }))
+);
+const AdminAuditPage = lazy(() =>
+  import('@/features/admin-audit/pages/AdminAuditPage').then((m) => ({ default: m.AdminAuditPage }))
+);
+
+// ============================================================================
+// Predicate functions (pure, unit-testable)
+// ============================================================================
+export function isAuthenticated(user: { id?: string } | null | undefined): boolean {
+  return Boolean(user && user.id);
+}
+
+export function isAdmin(user: { role?: string } | null | undefined): boolean {
+  return Boolean(user && user.role === 'admin');
+}
+
+export function canAccessAudit(user: { role?: string } | null | undefined): boolean {
+  return isAdmin(user);
+}
 
 // ============================================================================
 // URL routing (replaces the old state-based AuthRoute). Every page is now a
@@ -59,6 +84,9 @@ const TITLES: Record<string, string> = {
   '/profile': 'Settings — Clean Architecture',
   '/pricing': 'Pricing — Clean Architecture',
   '/billing': 'Billing — Clean Architecture',
+  '/workspaces': 'Workspaces — Clean Architecture',
+  '/api-keys': 'API Keys — Clean Architecture',
+  '/admin/audit-logs': 'Audit Logs — Clean Architecture',
   '/invite': 'Accept invite — Clean Architecture',
   '/reset-password': 'Reset password — Clean Architecture',
 };
@@ -73,18 +101,37 @@ function RouteChrome() {
 }
 
 /** Structural auth guard: logged-out visitors bounce to /login. */
-function RequireAuth() {
+export function RequireAuth() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <Loading />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!isAuthenticated(user)) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
+/** Structural admin guard: logged-out bounce to /login; non-admins get 403 UI. */
+export function RequireAdmin() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <Loading />;
+  if (!isAuthenticated(user)) return <Navigate to="/login" replace />;
+  if (!isAdmin(user)) {
+    return (
+      <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
+        <Header />
+        <main className="flex-grow w-full py-8 px-4">
+          <Forbidden403 />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
   return <Outlet />;
 }
 
 /** Inverse guard: logged-in users skip auth pages straight to the app. */
-function GuestOnly() {
+export function GuestOnly() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <Loading />;
-  if (user) return <Navigate to="/" replace />;
+  if (isAuthenticated(user)) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 
@@ -118,6 +165,42 @@ function ProfileRoute() {
   );
 }
 
+function WorkspacesRoute() {
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
+      <Header />
+      <main className="flex-grow w-full py-8 px-4">
+        <WorkspacesPage />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+function ApiKeysRoute() {
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
+      <Header />
+      <main className="flex-grow w-full py-8 px-4">
+        <ApiKeysPage />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+function AdminAuditRoute() {
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
+      <Header />
+      <main className="flex-grow w-full py-8 px-4">
+        <AdminAuditPage />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
 function PricingRoute() {
   const navigate = useNavigate();
   return <PricingPage onBack={() => navigate('/')} />;
@@ -141,6 +224,9 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <RequireAuth />, children: [{ index: true, element: <MainApp /> }] },
       { path: '/profile', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><ProfileRoute /></Suspense> }] },
+      { path: '/workspaces', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><WorkspacesRoute /></Suspense> }] },
+      { path: '/api-keys', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><ApiKeysRoute /></Suspense> }] },
+      { path: '/admin/audit-logs', element: <RequireAdmin />, children: [{ index: true, element: <Suspense fallback={<Loading />}><AdminAuditRoute /></Suspense> }] },
       { path: '/pricing', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><PricingRoute /></Suspense> }] },
       { path: '/billing', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><BillingRoute /></Suspense> }] },
       {
@@ -160,3 +246,4 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
+

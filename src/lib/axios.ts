@@ -11,6 +11,31 @@ export const apiClient = axios.create({
 // Event name the router listens for (see router.tsx UpgradeRedirector) to
 // route plan-gated 403s.
 export const UPGRADE_REQUIRED_EVENT = 'billing:upgrade-required';
+export const ACTIVE_ORG_STORAGE_KEY = 'active_org_id';
+
+export function getActiveOrgId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(ACTIVE_ORG_STORAGE_KEY);
+}
+
+export function setActiveOrgId(orgId: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (orgId) {
+    localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, orgId);
+    document.cookie = `active_org_id=${orgId}; path=/; max-age=2592000; SameSite=Lax`;
+  } else {
+    localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
+    document.cookie = `active_org_id=; path=/; max-age=0; SameSite=Lax`;
+  }
+}
+
+apiClient.interceptors.request.use((config) => {
+  const activeOrg = getActiveOrgId();
+  if (activeOrg && config.headers) {
+    config.headers['X-Organization-Id'] = activeOrg;
+  }
+  return config;
+});
 
 let isRefreshing = false;
 let refreshPromise: Promise<any> | null = null;
