@@ -26,6 +26,7 @@ import { billingRoutes, billingWebhook } from './api/routes/billingRoutes';
 import workspaceRoutes from './api/routes/workspaceRoutes';
 import { apiKeyRoutes } from './api/routes/apiKeyRoutes';
 import { auditLogRoutes } from './api/routes/auditLogRoutes';
+import { idempotency } from './api/middleware/idempotency';
 import { db } from './infrastructure/database';
 
 // ============================================================================
@@ -72,6 +73,7 @@ app.use('/api', apiLimiter);
 // this route mounts `express.raw()` BEFORE the global `express.json()` below
 // (a parsed body would break the HMAC). See billingRoutes for the handler.
 app.use('/api/billing/webhook', express.raw({ type: 'application/json' }), billingWebhook);
+app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), billingWebhook);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -91,26 +93,33 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 if (!IS_PROD) {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.use('/api/v1/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 }
 
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/profile', profileRoutes);
-app.use('/api/billing', billingRoutes);
-app.use('/api/workspaces', workspaceRoutes);
-app.use('/api/api-keys', apiKeyRoutes);
-app.use('/api/admin/audit-logs', auditLogRoutes);
+// ----------------------------------------------------------------------------
+// V1 Router composition: Standardized API root with Idempotency middleware
+// ----------------------------------------------------------------------------
+const v1Router = express.Router();
+v1Router.use(idempotency);
+
+v1Router.use('/auth', authRoutes);
+v1Router.use('/users', userRoutes);
+v1Router.use('/profile', profileRoutes);
+v1Router.use('/billing', billingRoutes);
+v1Router.use('/workspaces', workspaceRoutes);
+v1Router.use('/api-keys', apiKeyRoutes);
+v1Router.use('/admin/audit-logs', auditLogRoutes);
 
 // Cloud Health Probes (Kubernetes / ECS / Cloud Run)
-app.get('/api/health/live', (_req, res) => {
+const liveHealthHandler = (_req: express.Request, res: express.Response) => {
   res.status(200).json({
     status: 'alive',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
-});
+};
 
-app.get('/api/health/ready', (_req, res) => {
+const readyHealthHandler = (_req: express.Request, res: express.Response) => {
   try {
     const start = Date.now();
     db.prepare('SELECT 1').get();
@@ -137,20 +146,36 @@ app.get('/api/health/ready', (_req, res) => {
       timestamp: new Date().toISOString(),
     });
   }
-});
+};
 
-app.get('/api/health', (_req, res) => {
+const okHealthHandler = (_req: express.Request, res: express.Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
+};
+
+v1Router.get('/health/live', liveHealthHandler);
+v1Router.get('/health/ready', readyHealthHandler);
+v1Router.get('/health', okHealthHandler);
 
 // Ops metrics (per-process counters). Admin-only: route shapes + traffic
 // volumes are internal. Multi-instance prod should scrape a shared backend
 // (Prometheus/StatsD) instead — see `observability.ts`.
 const requireActiveUserOps = createRequireActiveUser(userRepository);
-app.get('/api/metrics', authenticate, requireActiveUserOps, authorizeAdmin, async (_req, res) => {
+v1Router.get('/metrics', authenticate, requireActiveUserOps, authorizeAdmin, async (_req, res) => {
   const metrics = await getMetricsSnapshot();
   res.json({ metrics, at: new Date().toISOString() });
 });
+
+// Primary mount: /api/v1
+app.use('/api/v1', v1Router);
+
+// Legacy shim: Keep /api with Deprecation header for 1 release
+const legacyApiShim: express.RequestHandler = (_req, res, next) => {
+  res.setHeader('Deprecation', 'true');
+  res.setHeader('Warning', '299 - "This API endpoint is deprecated. Please migrate to /api/v1."');
+  next();
+};
+
+app.use('/api', legacyApiShim, v1Router);
 
 // Local uploads static serving (for LocalStorage in dev/test)
 const uploadsDir = path.resolve(process.cwd(), 'data', 'uploads');

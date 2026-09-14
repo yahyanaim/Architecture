@@ -7,6 +7,7 @@ import { ActiveUserRequest } from '../middleware/requireActiveUser';
 import { audit } from '../../infrastructure/audit';
 import { JobQueue } from '../../infrastructure/queue';
 import { APP_URL } from '../../config/index';
+import { parsePaginationParams, paginateWithCursor, decodeCursor } from '../../lib/pagination';
 
 const UuidParamSchema = z.object({
   id: z.string().uuid('Invalid user ID format'),
@@ -96,7 +97,36 @@ export class UserController {
         role: user.role
       }));
 
-      res.status(200).json(response);
+      const { cursor, limit } = parsePaginationParams(req.query as Record<string, unknown>, 50, 100);
+
+      let filteredUsers = response;
+      if (cursor) {
+        const decoded = decodeCursor<{ id: string }>(cursor);
+        if (decoded?.id) {
+          const cursorIndex = filteredUsers.findIndex(u => u.id === decoded.id);
+          if (cursorIndex >= 0) {
+            filteredUsers = filteredUsers.slice(cursorIndex + 1);
+          }
+        }
+      }
+
+      const paginated = paginateWithCursor(filteredUsers, limit, (u) => ({ id: u.id }));
+
+      res.setHeader('X-Next-Cursor', paginated.nextCursor || '');
+      res.setHeader('X-Has-More', String(paginated.hasMore));
+
+      // Backwards compatibility: If legacy unversioned /api request without pagination params, return array
+      const isLegacyUnpaginated =
+        !req.baseUrl.includes('/v1') &&
+        !req.originalUrl.includes('/v1') &&
+        req.query.cursor === undefined &&
+        req.query.limit === undefined;
+
+      if (isLegacyUnpaginated) {
+        res.status(200).json(response);
+      } else {
+        res.status(200).json(paginated);
+      }
     } catch (error) {
       next(error);
     }

@@ -36,7 +36,8 @@ export type CreatedApiKeyResponse = z.infer<typeof CreatedApiKeyResponseSchema>;
 export const apiKeysApi = {
   list: async (): Promise<ApiKey[]> => {
     const response = await apiClient.get('/api-keys');
-    return z.array(ApiKeySchema).parse(response.data);
+    const items = Array.isArray(response.data) ? response.data : response.data.data;
+    return z.array(ApiKeySchema).parse(items);
   },
 
   create: async (data: CreateApiKeyDTO): Promise<CreatedApiKeyResponse> => {

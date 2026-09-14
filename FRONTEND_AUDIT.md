@@ -45,5 +45,11 @@ not structure.
 | 4 | Retry on 401/403/404 | `retry` predicate skips 401/403/404/422, one retry otherwise — gated redirects fire immediately |
 | 5 | Generic toasts | `lib/errors.ts apiErrorMessage()` in every catch — backend reasons reach user/support |
 | 6 | No focus/scroll management | `RouteChrome`: per-route `document.title` + scroll reset on navigation |
+| 7 | Unversioned /api baseURL & rigid array responses | `src/lib/axios.ts` updated to `baseURL: '/api/v1'`, feature APIs unwrap both `{ data, pagination }` and legacy arrays |
+
+**API Hardening (v1):**
+- Client requests now hit `/api/v1` by default via axios baseURL.
+- Legacy `/api` receives standard deprecation headers (`Deprecation: true`, `Warning: 299`).
+- Feature clients (`userApi`, `apiKeysApi`) safely support cursor pagination.
 
 **Watch items (non-blocking):** dialog screen-reader behavior still unverified; E2E suite absent; bundle main chunk still ~789KB (react-router added — further manualChunks possible).

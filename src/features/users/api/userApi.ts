@@ -4,7 +4,7 @@ import { User, CreateUserDTO } from '../types';
 export const userApi = {
   getUsers: async (): Promise<User[]> => {
     const response = await apiClient.get('/users');
-    return response.data;
+    return Array.isArray(response.data) ? response.data : response.data.data;
   },
 
   createUser: async (data: CreateUserDTO): Promise<User> => {

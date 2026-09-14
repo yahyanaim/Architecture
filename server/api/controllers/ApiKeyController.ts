@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ApiKeyService } from '../../domain/services/ApiKeyService';
 import { TenantRequest } from '../middleware/resolveTenant';
 import { audit } from '../../infrastructure/audit';
+import { parsePaginationParams, paginateWithCursor, decodeCursor } from '../../lib/pagination';
 
 export class ApiKeyController {
   constructor(private readonly apiKeyService: ApiKeyService) {}
@@ -10,17 +11,45 @@ export class ApiKeyController {
     try {
       const r = req as TenantRequest;
       const keys = await this.apiKeyService.listApiKeys(r.tenant.orgId);
-      res.json(
-        keys.map((k) => ({
-          id: k.id,
-          name: k.name,
-          keyPrefix: k.keyPrefix,
-          scopes: k.scopes,
-          expiresAt: k.expiresAt?.toISOString() ?? null,
-          lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
-          createdAt: k.createdAt.toISOString(),
-        }))
-      );
+      const items = keys.map((k) => ({
+        id: k.id,
+        name: k.name,
+        keyPrefix: k.keyPrefix,
+        scopes: k.scopes,
+        expiresAt: k.expiresAt?.toISOString() ?? null,
+        lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+        createdAt: k.createdAt.toISOString(),
+      }));
+
+      const { cursor, limit } = parsePaginationParams(req.query as Record<string, unknown>, 50, 100);
+
+      let filteredKeys = items;
+      if (cursor) {
+        const decoded = decodeCursor<{ id: string }>(cursor);
+        if (decoded?.id) {
+          const cursorIndex = filteredKeys.findIndex(k => k.id === decoded.id);
+          if (cursorIndex >= 0) {
+            filteredKeys = filteredKeys.slice(cursorIndex + 1);
+          }
+        }
+      }
+
+      const paginated = paginateWithCursor(filteredKeys, limit, (k) => ({ id: k.id }));
+
+      res.setHeader('X-Next-Cursor', paginated.nextCursor || '');
+      res.setHeader('X-Has-More', String(paginated.hasMore));
+
+      const isLegacyUnpaginated =
+        !req.baseUrl.includes('/v1') &&
+        !req.originalUrl.includes('/v1') &&
+        req.query.cursor === undefined &&
+        req.query.limit === undefined;
+
+      if (isLegacyUnpaginated) {
+        res.json(items);
+      } else {
+        res.json(paginated);
+      }
     } catch (err) {
       next(err);
     }
