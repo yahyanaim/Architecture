@@ -9,7 +9,8 @@ import { SqliteApiKeyRepository } from './SqliteApiKeyRepository';
 import { SqliteAuditLogRepository } from './SqliteAuditLogRepository';
 import { OutboxRelay } from '../outbox/OutboxRelay';
 import { defaultTotpService } from '../security/TotpService';
-import { LogMailer } from '../mailer';
+import { createMailer } from '../mailer';
+import { createStorage } from '../storage';
 import { JobQueue } from '../queue';
 import { defaultPasswordHasher } from '../security/BcryptPasswordHasher';
 import { defaultTokenService } from '../security/JwtTokenService';
@@ -90,11 +91,13 @@ export const apiKeyRepository = isPostgresActive
 export const auditLogRepository = isPostgresActive
   ? new PgAuditLogRepository()
   : new SqliteAuditLogRepository();
+// Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox pattern).
+// When MAILER_DRIVER='resend', sends live email via Resend API.
+export const mailer = createMailer();
 
-// Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox
-// pattern). For prod, implement `SmtpMailer`/provider client against the
-// `Mailer` port and swap this line.
-export const mailer = new LogMailer();
+// File storage: LocalStorage writes to `data/uploads/` (dev/test).
+// When STORAGE_DRIVER='s3', uploads to AWS S3, Cloudflare R2, MinIO, etc.
+export const storage = createStorage();
 
 // Durable job queue (SQLite `jobs` table). Worker started in `server.ts`.
 export const jobQueue = new JobQueue(mailer);

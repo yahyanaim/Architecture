@@ -152,6 +152,13 @@ app.get('/api/metrics', authenticate, requireActiveUserOps, authorizeAdmin, asyn
   res.json({ metrics, at: new Date().toISOString() });
 });
 
+// Local uploads static serving (for LocalStorage in dev/test)
+const uploadsDir = path.resolve(process.cwd(), 'data', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
+
 // PRODUCTION LIFECYCLE: `npm run build` emits the Vite SPA into `dist/`.
 // Serve it here (with SPA fallback) so one process hosts API + frontend.
 // Development skips this — `server.ts` mounts Vite middleware instead.

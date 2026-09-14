@@ -79,4 +79,48 @@ export const DATABASE_URL = process.env.DATABASE_URL?.trim() || '';
 // When unset, in-memory fallbacks are used automatically.
 export const REDIS_URL = process.env.REDIS_URL?.trim() || '';
 
-export default { JWT_SECRET, JWT_EXPIRES_IN, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS, APP_URL, LOG_LEVEL, ERROR_WEBHOOK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PRO, STRIPE_PRICE_ENTERPRISE, CORS_ORIGINS, TRUST_PROXY, PORT, IS_PROD, DATABASE_URL, REDIS_URL };
+// Mailer configuration:
+// MAILER_DRIVER='log' writes .eml files to data/outbox/ (dev/test).
+// MAILER_DRIVER='resend' delivers live emails via Resend API using RESEND_API_KEY.
+export const MAILER_DRIVER = (process.env.MAILER_DRIVER?.trim() || 'log') as 'log' | 'resend';
+export const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() || '';
+export const MAIL_FROM = process.env.MAIL_FROM?.trim() || 'noreply@example.com';
+
+// Storage configuration:
+// STORAGE_DRIVER='local' stores uploaded files in data/uploads/ (dev/test).
+// STORAGE_DRIVER='s3' uploads files to AWS S3, Cloudflare R2, MinIO, etc.
+export const STORAGE_DRIVER = (process.env.STORAGE_DRIVER?.trim() || 'local') as 'local' | 's3';
+export const S3_BUCKET = process.env.S3_BUCKET?.trim() || '';
+export const S3_REGION = process.env.S3_REGION?.trim() || 'us-east-1';
+export const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID?.trim() || '';
+export const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY?.trim() || '';
+export const S3_ENDPOINT = process.env.S3_ENDPOINT?.trim() || '';
+
+export default {
+  JWT_SECRET,
+  JWT_EXPIRES_IN,
+  ACCESS_TOKEN_TTL,
+  REFRESH_TOKEN_TTL_DAYS,
+  APP_URL,
+  LOG_LEVEL,
+  ERROR_WEBHOOK_URL,
+  STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET,
+  STRIPE_PRICE_PRO,
+  STRIPE_PRICE_ENTERPRISE,
+  CORS_ORIGINS,
+  TRUST_PROXY,
+  PORT,
+  IS_PROD,
+  DATABASE_URL,
+  REDIS_URL,
+  MAILER_DRIVER,
+  RESEND_API_KEY,
+  MAIL_FROM,
+  STORAGE_DRIVER,
+  S3_BUCKET,
+  S3_REGION,
+  AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY,
+  S3_ENDPOINT,
+};
