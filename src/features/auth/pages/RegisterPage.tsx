@@ -143,6 +143,30 @@ export function RegisterPage() {
           </button>
         </form>
 
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-2 text-gray-500">Or continue with</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <a
+            href="/api/auth/oauth/google/url?redirect=true"
+            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <span>Google</span>
+          </a>
+          <a
+            href="/api/auth/oauth/github/url?redirect=true"
+            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <span>GitHub</span>
+          </a>
+        </div>
+
         <p className="text-center mt-6 text-gray-600">
           Already have an account?{' '}
           <Link to="/login" className="text-black font-medium hover:underline">

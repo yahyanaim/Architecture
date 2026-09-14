@@ -96,6 +96,12 @@ export const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID?.trim() || '';
 export const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY?.trim() || '';
 export const S3_ENDPOINT = process.env.S3_ENDPOINT?.trim() || '';
 
+// OAuth / OIDC Provider Credentials (Google & GitHub)
+export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID?.trim() || '';
+export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET?.trim() || '';
+export const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID?.trim() || '';
+export const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET?.trim() || '';
+
 export default {
   JWT_SECRET,
   JWT_EXPIRES_IN,
@@ -123,4 +129,8 @@ export default {
   AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY,
   S3_ENDPOINT,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET,
 };

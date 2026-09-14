@@ -49,7 +49,7 @@ export class AuthService {
     AuthService.defaultTokenService = service;
   }
 
-  private readonly tokenService: ITokenService;
+  public readonly tokenService: ITokenService;
   private readonly refreshTokenTtlDays: number;
 
   constructor(
@@ -458,7 +458,7 @@ export class AuthService {
   }
 
   /** Self-heal: legacy/imported users predating orgs get a personal org. */
-  private async ensureOrg(user: User): Promise<Organization> {
+  async ensureOrg(user: User): Promise<Organization> {
     const existing = await this.orgRepository.findById(user.orgId);
     if (existing) {
       if (this.membershipRepository) {

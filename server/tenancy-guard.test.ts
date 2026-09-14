@@ -62,6 +62,21 @@ const SQL_ALLOWLIST: Allowance[] = [
     match: 'select * from api_keys where key_hash = ?',
     reason: 'GLOBAL KEY LOOKUP: API key bearer auth finds credential by SHA-256 hash before tenant hydration.',
   },
+  {
+    file: 'SqliteOAuthAccountRepository.ts',
+    match: 'select * from oauth_accounts where provider = ? and provider_sub = ?',
+    reason: 'FEDERATED IDENTITY LOOKUP: OAuth callback finds existing linked identity by provider and subject before tenant resolution.',
+  },
+  {
+    file: 'SqliteOAuthAccountRepository.ts',
+    match: 'select * from oauth_accounts where user_id = ? order by created_at desc',
+    reason: 'USER OAUTH LINKAGES: Caller manages linked provider credentials across workspaces.',
+  },
+  {
+    file: 'SqliteOAuthAccountRepository.ts',
+    match: 'delete from oauth_accounts where id = ?',
+    reason: 'PK UNLINK: User unlinks a specific OAuth provider identity by primary key.',
+  },
 ];
 
 function tenantTables(): Set<string> {

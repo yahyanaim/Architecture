@@ -7,6 +7,7 @@ import { SqliteOutboxRepository } from './SqliteOutboxRepository';
 import { SqliteTwoFactorRepository } from './SqliteTwoFactorRepository';
 import { SqliteApiKeyRepository } from './SqliteApiKeyRepository';
 import { SqliteAuditLogRepository } from './SqliteAuditLogRepository';
+import { SqliteOAuthAccountRepository } from './SqliteOAuthAccountRepository';
 import { OutboxRelay } from '../outbox/OutboxRelay';
 import { defaultTotpService } from '../security/TotpService';
 import { createMailer } from '../mailer';
@@ -25,6 +26,7 @@ import { PgOutboxRepository } from './PgOutboxRepository';
 import { PgApiKeyRepository } from './PgApiKeyRepository';
 import { PgAuditLogRepository } from './PgAuditLogRepository';
 import { PgTwoFactorRepository } from './PgTwoFactorRepository';
+import { PgOAuthAccountRepository } from './PgOAuthAccountRepository';
 
 // Initialize default domain ports in composition root
 User.setDefaultHasher(defaultPasswordHasher);
@@ -91,6 +93,10 @@ export const apiKeyRepository = isPostgresActive
 export const auditLogRepository = isPostgresActive
   ? new PgAuditLogRepository()
   : new SqliteAuditLogRepository();
+
+export const oauthAccountRepository = isPostgresActive
+  ? new PgOAuthAccountRepository()
+  : new SqliteOAuthAccountRepository();
 // Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox pattern).
 // When MAILER_DRIVER='resend', sends live email via Resend API.
 export const mailer = createMailer();
@@ -101,3 +107,4 @@ export const storage = createStorage();
 
 // Durable job queue (SQLite `jobs` table). Worker started in `server.ts`.
 export const jobQueue = new JobQueue(mailer);
+

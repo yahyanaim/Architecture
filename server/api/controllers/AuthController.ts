@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService, SessionTokens } from '../../domain/services/AuthService';
+import { OAuthService } from '../../domain/services/OAuthService';
 import { ActiveUserRequest } from '../middleware/requireActiveUser';
 import {
   RegisterSchema, LoginSchema, EmailRequestSchema, ResetPasswordSchema, InviteAcceptSchema,
@@ -43,7 +44,11 @@ function toResponse(id: string, name: string, email: string, role: 'admin' | 'us
 export class AuthController {
   // `jobQueue` delivers verify/reset/invite emails asynchronously — HTTP
   // responses never wait on mail delivery (enqueue + return).
-  constructor(private readonly authService: AuthService, private readonly jobQueue: JobQueue) { }
+  constructor(
+    private readonly authService: AuthService,
+    private readonly jobQueue: JobQueue,
+    private readonly oauthService?: OAuthService
+  ) { }
 
   private setSession(res: Response, tokens: SessionTokens): void {
     res.cookie('access', tokens.access, ACCESS_COOKIE);
@@ -315,6 +320,91 @@ export class AuthController {
       ));
     } catch (error) {
       next(error);
+    }
+  };
+
+  getOAuthUrl = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!this.oauthService) {
+        res.status(501).json({ message: 'OAuth service not configured' });
+        return;
+      }
+      const provider = req.params.provider?.toLowerCase() as 'google' | 'github';
+      if (provider !== 'google' && provider !== 'github') {
+        res.status(400).json({ message: `Unsupported provider: ${req.params.provider}` });
+        return;
+      }
+
+      const state = globalThis.crypto.randomUUID();
+      res.cookie('oauth_state', state, {
+        httpOnly: true,
+        secure: IS_PROD,
+        sameSite: 'lax',
+        maxAge: 10 * 60 * 1000,
+        path: '/',
+      });
+
+      const url = this.oauthService.getAuthorizationUrl(provider, state);
+      if (req.query.redirect === 'true') {
+        res.redirect(url);
+      } else {
+        res.json({ url });
+      }
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  oauthCallback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!this.oauthService) {
+        res.status(501).json({ message: 'OAuth service not configured' });
+        return;
+      }
+      const provider = (req.params.provider || (req.query.provider as string) || '').toLowerCase() as 'google' | 'github';
+      const code = (req.query.code || req.body?.code) as string | undefined;
+      const state = (req.query.state || req.body?.state) as string | undefined;
+      const savedState = req.cookies?.oauth_state as string | undefined;
+
+      if (savedState && state && state !== savedState) {
+        res.status(400).json({ message: 'Invalid OAuth state' });
+        return;
+      }
+
+      if (!code) {
+        res.status(400).json({ message: 'Missing OAuth authorization code' });
+        return;
+      }
+
+      res.clearCookie('oauth_state', CLEAR_COOKIE_OPTIONS);
+
+      const result = await this.oauthService.handleCallback(provider, code, req.ip);
+
+      if (result.mfaRequired) {
+        if (req.headers.accept?.includes('application/json')) {
+          res.json({ mfaRequired: true, mfaToken: result.mfaToken });
+        } else {
+          res.redirect(`/login?mfa=1&token=${encodeURIComponent(result.mfaToken)}`);
+        }
+        return;
+      }
+
+      this.setSession(res, result.tokens);
+
+      if (req.headers.accept?.includes('application/json') || req.method === 'POST') {
+        res.json(toResponse(
+          result.user.id,
+          result.user.name,
+          result.user.email,
+          result.user.role,
+          result.user.isVerified,
+          result.org.id
+        ));
+      } else {
+        res.redirect('/');
+      }
+    } catch (err) {
+      next(err);
     }
   };
 }

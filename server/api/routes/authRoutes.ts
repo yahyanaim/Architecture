@@ -2,6 +2,8 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/AuthController';
 import { AuthService } from '../../domain/services/AuthService';
+import { OAuthService } from '../../domain/services/OAuthService';
+import { DefaultOAuthProviderClient } from '../../infrastructure/oauth/OAuthProviderClient';
 import {
   userRepository,
   orgRepository,
@@ -11,10 +13,19 @@ import {
   twoFactorRepository,
   totpService,
   jobQueue,
+  oauthAccountRepository,
+  tokenService,
 } from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
 import { loginAccountLimiter } from '../middleware/loginAccountLimiter';
+import {
+  APP_URL,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET,
+} from '../../config/index';
 
 const router = Router();
 
@@ -55,8 +66,33 @@ const authService = new AuthService(
   twoFactorRepository,
   totpService
 );
+
+const oauthProviderClient = new DefaultOAuthProviderClient(
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GITHUB_CLIENT_ID,
+  GITHUB_CLIENT_SECRET
+);
+
+const oauthService = new OAuthService(
+  userRepository,
+  orgRepository,
+  billingRepository,
+  membershipRepository,
+  oauthAccountRepository,
+  authService,
+  oauthProviderClient,
+  twoFactorRepository,
+  tokenService,
+  {
+    appUrl: APP_URL,
+    googleClientId: GOOGLE_CLIENT_ID,
+    githubClientId: GITHUB_CLIENT_ID,
+  }
+);
+
 const requireActiveUser = createRequireActiveUser(userRepository);
-const authController = new AuthController(authService, jobQueue);
+const authController = new AuthController(authService, jobQueue, oauthService);
 
 router.post('/register', registerLimiter, authController.register);
 router.post('/login', authLimiter, loginAccountLimiter, authController.login);
@@ -64,6 +100,13 @@ router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 // `me` is liveness-checked so deleted/deactivated accounts can't poll it.
 router.get('/me', authenticate, requireActiveUser, authController.me);
+
+// OAuth 2.0 / OIDC (Google & GitHub)
+router.get('/oauth/:provider/url', authController.getOAuthUrl);
+router.get('/oauth/:provider/callback', authController.oauthCallback);
+router.post('/oauth/:provider/callback', authController.oauthCallback);
+router.get('/oauth/callback', authController.oauthCallback);
+router.post('/oauth/callback', authController.oauthCallback);
 
 // Two-Factor Authentication (2FA / TOTP)
 router.post('/2fa/verify', authLimiter, authController.verify2Fa);
@@ -83,3 +126,4 @@ router.post('/password-reset', authLimiter, authController.resetPassword);
 router.post('/invite-accept', authLimiter, authController.acceptInvite);
 
 export { router as authRoutes };
+
