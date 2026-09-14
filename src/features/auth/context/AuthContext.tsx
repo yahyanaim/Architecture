@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authApi, AuthUser } from '../api/authApi';
-import { apiClient } from '@/lib/axios';
+import { apiClient, setActiveOrgId } from '@/lib/axios';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -33,17 +33,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
+    setActiveOrgId(null);
     const response = await authApi.login(email, password);
+    if (response.orgId) {
+      setActiveOrgId(response.orgId);
+    }
     setUser({ id: response.id, name: response.name, email: response.email, role: response.role });
   };
 
   const register = async (name: string, email: string, password: string, confirmPassword: string) => {
+    setActiveOrgId(null);
     const response = await authApi.register(name, email, password, confirmPassword);
+    if (response.orgId) {
+      setActiveOrgId(response.orgId);
+    }
     setUser({ id: response.id, name: response.name, email: response.email, role: response.role });
   };
 
   const acceptInvite = async (token: string, password: string, confirmPassword: string, name?: string) => {
+    setActiveOrgId(null);
     const response = await authApi.acceptInvite(token, password, confirmPassword, name);
+    if (response.orgId) {
+      setActiveOrgId(response.orgId);
+    }
     setUser({ id: response.id, name: response.name, email: response.email, role: response.role });
   };
 
@@ -53,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
+    setActiveOrgId(null);
     setUser(null);
   };
 
