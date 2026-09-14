@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import { app } from "./server/app";
-import { PORT, IS_PROD } from "./server/config/index";
+import { PORT, IS_PROD, DATABASE_URL } from "./server/config/index";
 import { migrate } from "./server/infrastructure/db/migrate";
+import { migratePg } from "./server/infrastructure/db/migratePg";
+import { closePgPool } from "./server/infrastructure/pg";
 import { jobQueue } from "./server/infrastructure/repositories/SharedUserRepository";
 import { logger } from "./server/infrastructure/observability";
 
@@ -13,7 +15,12 @@ import { logger } from "./server/infrastructure/observability";
 async function startServer() {
   // BOOT ORDER (data before traffic): migrations first so every adapter sees
   // the full schema; legacy `users.json` import happens here, once.
-  migrate();
+  if (DATABASE_URL) {
+    logger.info('[boot] running PostgreSQL migrations');
+    await migratePg();
+  } else {
+    migrate();
+  }
 
   // Background worker (emails, receipts). Skipped under test so suites exit
   // cleanly; the timer is `unref`'d so it never holds the process open alone.
@@ -40,8 +47,11 @@ async function startServer() {
   const server = app.listen(PORT, "0.0.0.0", () => logger.info(`up`, { port: PORT }));
 
   // Graceful shutdown: stop timers so in-flight jobs finish draining.
-  const shutdown = () => {
+  const shutdown = async () => {
     jobQueue.stopWorker();
+    if (DATABASE_URL) {
+      await closePgPool().catch(() => {});
+    }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000).unref();
   };

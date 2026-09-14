@@ -1,3 +1,4 @@
+import { DATABASE_URL } from '../../config/index';
 import { SqliteUserRepository } from './SqliteUserRepository';
 import { SqliteTokenStore } from './SqliteTokenStore';
 import { SqliteBillingRepository } from './SqliteBillingRepository';
@@ -15,8 +16,14 @@ import { defaultTokenService } from '../security/JwtTokenService';
 import { User } from '../../domain/entities/User';
 import { AuthService } from '../../domain/services/AuthService';
 
-import { PostgresUserRepository } from './PostgresUserRepository';
-import { PostgresBillingRepository } from './PostgresBillingRepository';
+import { PgUserRepository } from './PgUserRepository';
+import { PgBillingRepository } from './PgBillingRepository';
+import { PgMembershipRepository } from './PgMembershipRepository';
+import { PgTokenStore } from './PgTokenStore';
+import { PgOutboxRepository } from './PgOutboxRepository';
+import { PgApiKeyRepository } from './PgApiKeyRepository';
+import { PgAuditLogRepository } from './PgAuditLogRepository';
+import { PgTwoFactorRepository } from './PgTwoFactorRepository';
 
 // Initialize default domain ports in composition root
 User.setDefaultHasher(defaultPasswordHasher);
@@ -34,44 +41,55 @@ export const tokenService = defaultTokenService;
  * and API layers stay untouched. `migrate()` runs separately at boot
  * (`server.ts`) so schema always precedes first use.
  *
- * NOTE on runtime switching: If `DATABASE_URL` is set in environment,
- * `userRepository` and `billingRepository` automatically switch to Neon/PostgreSQL
- * adapters (`PostgresUserRepository`, `PostgresBillingRepository`).
- *
- * TODO (Production Postgres Migration):
- * Currently, only `userRepository` and `billingRepository` have PostgreSQL adapter
- * implementations. When `DATABASE_URL` is set, `tokenStore`, `membershipRepository`,
- * `apiKeyRepository`, `auditLogRepository`, and `outboxRepository` continue to use
- * SQLite adapters. Before running fully distributed in production across multiple
- * containers without a local SQLite dependency, Postgres implementations must be
- * created for these remaining repositories:
- * - PostgresTokenStore
- * - PostgresMembershipRepository
- * - PostgresApiKeyRepository
- * - PostgresAuditLogRepository
- * - PostgresOutboxRepository
+ * NOTE on runtime switching: If `DATABASE_URL` is set in configuration,
+ * all repositories automatically switch to PostgreSQL adapters (`Pg*`).
+ * When `DATABASE_URL` is unset, the system uses SQLite adapters (`Sqlite*`).
  *
  * NOTE on tests: `database.ts` opens `:memory:` under NODE_ENV=test, and
  * constructing these adapters performs no I/O, so importing this module in
  * tests is side-effect free.
  */
-export const userRepository = process.env.DATABASE_URL
-  ? new PostgresUserRepository()
+export const isPostgresActive = Boolean(DATABASE_URL);
+
+export const userRepository = isPostgresActive
+  ? new PgUserRepository()
   : new SqliteUserRepository();
-export const tokenStore = new SqliteTokenStore();
-export const billingRepository = process.env.DATABASE_URL
-  ? new PostgresBillingRepository()
+
+export const tokenStore = isPostgresActive
+  ? new PgTokenStore()
+  : new SqliteTokenStore();
+
+export const billingRepository = isPostgresActive
+  ? new PgBillingRepository()
   : new SqliteBillingRepository();
+
 // Org + subscription share one class (both are tiny org-scoped lookups).
 export const orgRepository = billingRepository;
 export const subscriptionRepository = billingRepository;
-export const membershipRepository = new SqliteMembershipRepository();
-export const outboxRepository = new SqliteOutboxRepository();
+
+export const membershipRepository = isPostgresActive
+  ? new PgMembershipRepository()
+  : new SqliteMembershipRepository();
+
+export const outboxRepository = isPostgresActive
+  ? new PgOutboxRepository()
+  : new SqliteOutboxRepository();
+
 export const outboxRelay = new OutboxRelay(outboxRepository);
-export const twoFactorRepository = new SqliteTwoFactorRepository();
+
+export const twoFactorRepository = isPostgresActive
+  ? new PgTwoFactorRepository()
+  : new SqliteTwoFactorRepository();
+
 export const totpService = defaultTotpService;
-export const apiKeyRepository = new SqliteApiKeyRepository();
-export const auditLogRepository = new SqliteAuditLogRepository();
+
+export const apiKeyRepository = isPostgresActive
+  ? new PgApiKeyRepository()
+  : new SqliteApiKeyRepository();
+
+export const auditLogRepository = isPostgresActive
+  ? new PgAuditLogRepository()
+  : new SqliteAuditLogRepository();
 
 // Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox
 // pattern). For prod, implement `SmtpMailer`/provider client against the
@@ -80,4 +98,3 @@ export const mailer = new LogMailer();
 
 // Durable job queue (SQLite `jobs` table). Worker started in `server.ts`.
 export const jobQueue = new JobQueue(mailer);
-

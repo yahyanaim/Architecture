@@ -70,4 +70,9 @@ export const CORS_ORIGINS = (process.env.CORS_ORIGIN || 'http://localhost:4000')
 export const TRUST_PROXY = process.env.TRUST_PROXY ?? '1';
 export const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 40001;
 
-export default { JWT_SECRET, JWT_EXPIRES_IN, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS, APP_URL, LOG_LEVEL, ERROR_WEBHOOK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PRO, STRIPE_PRICE_ENTERPRISE, CORS_ORIGINS, TRUST_PROXY, PORT, IS_PROD };
+// Database URL (Postgres connection string).
+// When unset, the application boots using local SQLite (better-sqlite3) for dev/test.
+// When set, the application connects to PostgreSQL for production multi-instance operation.
+export const DATABASE_URL = process.env.DATABASE_URL?.trim() || '';
+
+export default { JWT_SECRET, JWT_EXPIRES_IN, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL_DAYS, APP_URL, LOG_LEVEL, ERROR_WEBHOOK_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_PRO, STRIPE_PRICE_ENTERPRISE, CORS_ORIGINS, TRUST_PROXY, PORT, IS_PROD, DATABASE_URL };
