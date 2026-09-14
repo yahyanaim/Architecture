@@ -83,8 +83,11 @@ The template includes the following endpoints out of the box:
 - `PATCH /api/users/:id/status`: Toggles a user's active status (sessions die on next request).
 - `DELETE /api/users/:id`: Deletes a user.
 
-**Profile (auth, own account):**
+**Profile & Compliance (auth, own account):**
 - `GET /api/profile`, `PUT /api/profile`, `PUT /api/profile/password` (revokes other sessions), `DELETE /api/profile`
+- `GET /api/v1/me/export`: GDPR Data Portability export (complete JSON dump of user, org, subs, keys, and audit logs)
+- `DELETE /api/v1/me/purge`: GDPR Right to Erasure (immediate session termination, audit log anonymization, 30-day soft-delete retention, followed by automated hard purge job)
+- `GET /api/v1/auth/csrf`: CSRF double-submit token retrieval endpoint
 
 **Billing / System:**
 - `GET /api/billing/subscription`: Current org's plan/status/access/grace info
@@ -133,6 +136,22 @@ SQLite via `better-sqlite3` (`data/app.db`), created and migrated automatically 
 ### Role Protection
 - Admin-only endpoints protected by middleware
 - Prevents unauthorized access to sensitive operations
+
+### CSRF Protection (Double-Submit Cookie Pattern)
+- Mutating endpoints (`POST`, `PUT`, `PATCH`, `DELETE`) carrying browser session cookies (`access`, `refresh`, `token`) require a matching `X-CSRF-Token` or `X-XSRF-TOKEN` header.
+- Token is issued in a non-httpOnly cookie (`csrf_token` and `XSRF-TOKEN`, `SameSite=Lax`, `Secure` in production) readable by Axios / client scripts.
+- Pure machine requests via `Authorization: Bearer` and raw HMAC webhooks are exempt from CSRF checks.
+
+### Data Retention & Privacy (GDPR Compliance)
+- **Data Portability (`GET /api/v1/me/export`)**:
+  - Exports a unified JSON archive containing user profile data, organization workspace, active subscription details, provisioned API keys, and audit log events.
+- **Right to Erasure & 30-Day Retention (`DELETE /api/v1/me/purge`)**:
+  - **Immediate Session Kill**: Deletes all active rows from `refresh_tokens`, invalidates single-use `auth_tokens`, and clears browser session cookies (`access`, `refresh`, `token`).
+  - **Audit Trail Anonymization**: Scans `audit_logs` for entries associated with the user, replacing `actor_id` with `'anonymized'` and redacting email addresses within `details` JSON payloads to preserve regulatory auditability while eliminating personal data.
+  - **30-Day Soft-Delete Grace Period**: Account is marked `is_active = 0`, populated with `deleted_at` timestamp and `purge_due_at = now() + 30 days`. Login and token re-use are immediately blocked by `requireActiveUser` (403 Forbidden).
+  - **Automated Hard Purge Job**: Enqueues a scheduled background job `user.purge` in `JobQueue` to permanently delete the user row and cascade-delete all personal credentials across tables once the 30-day window expires.
+- **Log PII Redaction (`observability.ts`)**:
+  - The structured logger automatically scrubs email patterns (`/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g` -> `***`) and sensitive keys (`password`, `secret`, `token`, `authorization`, `creditCard`, `apiKey`) across all log messages and field metadata.
 
 ## Testing
 

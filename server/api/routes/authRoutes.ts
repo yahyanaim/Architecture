@@ -152,5 +152,11 @@ router.post('/password-reset', authLimiter, authController.resetPassword);
 // Org invite acceptance (sets password + verifies + auto-login).
 router.post('/invite-accept', authLimiter, authController.acceptInvite);
 
+// CSRF double-submit token retrieval
+router.get('/csrf', (req, res) => {
+  const token = (res.locals.csrfToken as string) || req.cookies?.csrf_token || req.cookies?.['XSRF-TOKEN'];
+  res.json({ csrfToken: token });
+});
+
 export { router as authRoutes };
 

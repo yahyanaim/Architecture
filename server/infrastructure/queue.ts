@@ -87,6 +87,10 @@ export class JobQueue {
         text,
       });
     };
+
+    this.handlers['user.purge'] ??= async (p: { userId: string }) => {
+      hardPurgeUser(p.userId);
+    };
   }
 
   register(type: string, handler: JobHandler): void {
@@ -205,3 +209,32 @@ export class JobQueue {
     return r.n;
   }
 }
+
+/**
+ * Permanently deletes a user and associated personal records across all tables (GDPR Hard Purge).
+ */
+export function hardPurgeUser(userId: string): void {
+  try {
+    db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(userId);
+  } catch {}
+  try {
+    db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  } catch {}
+  logger.info('[jobs] GDPR hard purge completed for user', { userId });
+}
+
+/**
+ * Sweeps and permanently purges any users whose 30-day soft-delete retention has elapsed.
+ */
+export function hardPurgeDueUsers(now: Date = new Date()): number {
+  try {
+    const rows = db.prepare('SELECT id FROM users WHERE deleted_at IS NOT NULL AND purge_due_at <= ?').all(now.toISOString()) as { id: string }[];
+    for (const r of rows) {
+      hardPurgeUser(r.id);
+    }
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+

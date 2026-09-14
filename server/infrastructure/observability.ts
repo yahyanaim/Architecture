@@ -13,9 +13,52 @@ const MIN: Level = (['debug', 'info', 'warn', 'error'] as Level[]).includes(LOG_
   ? (LOG_LEVEL as Level)
   : 'info';
 
+const EMAIL_REGEX = /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g;
+const SENSITIVE_KEYS = new Set([
+  'email',
+  'password',
+  'secret',
+  'token',
+  'authorization',
+  'creditcard',
+  'recoverycode',
+  'apikey',
+  'keyhash',
+]);
+
+/**
+ * Recursively masks email addresses and sensitive keys for GDPR / compliance.
+ * Emails are redacted to '***'.
+ */
+export function redactPII(value: unknown): any {
+  if (typeof value === 'string') {
+    return value.replace(EMAIL_REGEX, '***');
+  }
+  if (Array.isArray(value)) {
+    return value.map(redactPII);
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      const lower = k.toLowerCase();
+      if (lower === 'email' || lower.endsWith('email')) {
+        out[k] = '***';
+      } else if (SENSITIVE_KEYS.has(lower) || lower.includes('password') || lower.includes('secret')) {
+        out[k] = '***';
+      } else {
+        out[k] = redactPII(v);
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
 function emit(level: Level, msg: string, fields: Record<string, unknown> = {}): void {
   if (ORDER[level] < ORDER[MIN]) return;
-  const line = JSON.stringify({ ts: new Date().toISOString(), level, msg, pid: process.pid, ...fields });
+  const cleanMsg = typeof msg === 'string' ? msg.replace(EMAIL_REGEX, '***') : msg;
+  const cleanFields = redactPII(fields) as Record<string, unknown>;
+  const line = JSON.stringify({ ts: new Date().toISOString(), level, msg: cleanMsg, pid: process.pid, ...cleanFields });
   if (level === 'error' || level === 'warn') console.error(line);
   else console.log(line);
 }

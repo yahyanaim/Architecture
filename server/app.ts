@@ -27,7 +27,9 @@ import workspaceRoutes from './api/routes/workspaceRoutes';
 import { apiKeyRoutes } from './api/routes/apiKeyRoutes';
 import { auditLogRoutes } from './api/routes/auditLogRoutes';
 import { webhookRoutes } from './api/routes/webhookRoutes';
+import { meRoutes } from './api/routes/meRoutes';
 import { idempotency } from './api/middleware/idempotency';
+import { csrfProtection } from './api/middleware/csrf';
 import { db } from './infrastructure/database';
 
 // ============================================================================
@@ -78,6 +80,7 @@ app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), bi
 
 app.use(express.json());
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(requestId);
 // Request metrics (counts/latency per route) feed GET /api/metrics below.
 app.use(metricsMiddleware);
@@ -106,6 +109,7 @@ v1Router.use(idempotency);
 v1Router.use('/auth', authRoutes);
 v1Router.use('/users', userRoutes);
 v1Router.use('/profile', profileRoutes);
+v1Router.use('/me', meRoutes);
 v1Router.use('/billing', billingRoutes);
 v1Router.use('/workspaces', workspaceRoutes);
 v1Router.use('/api-keys', apiKeyRoutes);

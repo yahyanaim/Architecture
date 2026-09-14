@@ -34,6 +34,15 @@ apiClient.interceptors.request.use((config) => {
   if (activeOrg && config.headers) {
     config.headers['X-Organization-Id'] = activeOrg;
   }
+
+  // Double-submit CSRF protection: read token cookie and attach header
+  if (typeof document !== 'undefined' && config.headers) {
+    const match = document.cookie.match(/(?:^|;\s*)(?:csrf_token|XSRF-TOKEN)=([^;]+)/);
+    if (match && match[1]) {
+      config.headers['X-CSRF-Token'] = decodeURIComponent(match[1]);
+    }
+  }
+
   return config;
 });
 

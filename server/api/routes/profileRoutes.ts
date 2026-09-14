@@ -26,4 +26,14 @@ router.put('/', authenticate, requireActiveUser, resolveTenant, profileControlle
 router.put('/password', authenticate, requireActiveUser, resolveTenant, profileController.changePassword);
 router.delete('/', authenticate, requireActiveUser, resolveTenant, profileController.deleteAccount);
 
+// GDPR Compliance aliases
+router.get('/export', authenticate, requireActiveUser, resolveTenant, async (req, res, next) => {
+  const { meRoutes } = await import('./meRoutes');
+  return meRoutes(req, res, next);
+});
+router.delete('/purge', authenticate, requireActiveUser, resolveTenant, async (req, res, next) => {
+  const { meRoutes } = await import('./meRoutes');
+  return meRoutes(req, res, next);
+});
+
 export { router as profileRoutes };
