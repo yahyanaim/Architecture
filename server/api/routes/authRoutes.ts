@@ -15,7 +15,10 @@ import {
   jobQueue,
   oauthAccountRepository,
   tokenService,
+  passkeyRepository,
 } from '../../infrastructure/repositories/SharedUserRepository';
+import { PasskeyService } from '../../domain/services/PasskeyService';
+import { PasskeyController } from '../controllers/PasskeyController';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
 import { loginAccountLimiter } from '../middleware/loginAccountLimiter';
@@ -25,6 +28,9 @@ import {
   GOOGLE_CLIENT_SECRET,
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET,
+  RP_NAME,
+  RP_ID,
+  RP_ORIGIN,
 } from '../../config/index';
 
 const router = Router();
@@ -94,6 +100,18 @@ const oauthService = new OAuthService(
 const requireActiveUser = createRequireActiveUser(userRepository);
 const authController = new AuthController(authService, jobQueue, oauthService);
 
+const passkeyService = new PasskeyService(
+  passkeyRepository,
+  userRepository,
+  authService,
+  {
+    rpName: RP_NAME,
+    rpID: RP_ID,
+    rpOrigin: RP_ORIGIN,
+  }
+);
+const passkeyController = new PasskeyController(passkeyService);
+
 router.post('/register', registerLimiter, authController.register);
 router.post('/login', authLimiter, loginAccountLimiter, authController.login);
 router.post('/refresh', authController.refresh);
@@ -107,6 +125,15 @@ router.get('/oauth/:provider/callback', authController.oauthCallback);
 router.post('/oauth/:provider/callback', authController.oauthCallback);
 router.get('/oauth/callback', authController.oauthCallback);
 router.post('/oauth/callback', authController.oauthCallback);
+
+// WebAuthn / FIDO2 Passkeys
+router.post('/passkey/register/options', authenticate, requireActiveUser, passkeyController.getRegistrationOptions);
+router.post('/passkey/register/verify', authenticate, requireActiveUser, passkeyController.verifyRegistration);
+router.get('/passkey/login/options', authLimiter, passkeyController.getAuthenticationOptions);
+router.post('/passkey/login/options', authLimiter, passkeyController.getAuthenticationOptions);
+router.post('/passkey/login/verify', authLimiter, passkeyController.verifyAuthentication);
+router.get('/passkey/credentials', authenticate, requireActiveUser, passkeyController.listCredentials);
+router.delete('/passkey/credentials/:id', authenticate, requireActiveUser, passkeyController.deleteCredential);
 
 // Two-Factor Authentication (2FA / TOTP)
 router.post('/2fa/verify', authLimiter, authController.verify2Fa);

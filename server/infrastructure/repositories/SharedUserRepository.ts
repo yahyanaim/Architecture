@@ -8,6 +8,7 @@ import { SqliteTwoFactorRepository } from './SqliteTwoFactorRepository';
 import { SqliteApiKeyRepository } from './SqliteApiKeyRepository';
 import { SqliteAuditLogRepository } from './SqliteAuditLogRepository';
 import { SqliteOAuthAccountRepository } from './SqliteOAuthAccountRepository';
+import { SqlitePasskeyRepository } from './SqlitePasskeyRepository';
 import { OutboxRelay } from '../outbox/OutboxRelay';
 import { defaultTotpService } from '../security/TotpService';
 import { createMailer } from '../mailer';
@@ -27,6 +28,7 @@ import { PgApiKeyRepository } from './PgApiKeyRepository';
 import { PgAuditLogRepository } from './PgAuditLogRepository';
 import { PgTwoFactorRepository } from './PgTwoFactorRepository';
 import { PgOAuthAccountRepository } from './PgOAuthAccountRepository';
+import { PgPasskeyRepository } from './PgPasskeyRepository';
 
 // Initialize default domain ports in composition root
 User.setDefaultHasher(defaultPasswordHasher);
@@ -97,6 +99,10 @@ export const auditLogRepository = isPostgresActive
 export const oauthAccountRepository = isPostgresActive
   ? new PgOAuthAccountRepository()
   : new SqliteOAuthAccountRepository();
+
+export const passkeyRepository = isPostgresActive
+  ? new PgPasskeyRepository()
+  : new SqlitePasskeyRepository();
 // Mailer: LogMailer writes to `data/outbox/` (dev/test friendly outbox pattern).
 // When MAILER_DRIVER='resend', sends live email via Resend API.
 export const mailer = createMailer();

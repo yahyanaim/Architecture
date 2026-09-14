@@ -102,6 +102,17 @@ export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET?.trim() || 
 export const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID?.trim() || '';
 export const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET?.trim() || '';
 
+// WebAuthn / FIDO2 Passkeys Relying Party Config
+export const RP_NAME = process.env.RP_NAME?.trim() || 'Nexora Architecture';
+let defaultRpId = 'localhost';
+try {
+  defaultRpId = new URL(APP_URL).hostname;
+} catch {
+  defaultRpId = 'localhost';
+}
+export const RP_ID = process.env.RP_ID?.trim() || defaultRpId;
+export const RP_ORIGIN = process.env.RP_ORIGIN?.trim() || APP_URL;
+
 export default {
   JWT_SECRET,
   JWT_EXPIRES_IN,
@@ -133,4 +144,7 @@ export default {
   GOOGLE_CLIENT_SECRET,
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET,
+  RP_NAME,
+  RP_ID,
+  RP_ORIGIN,
 };

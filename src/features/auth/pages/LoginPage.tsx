@@ -4,14 +4,16 @@ import { useAuth } from '../context/AuthContext';
 import { validateLoginPassword } from '../lib/password';
 import { apiErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, KeyRound } from 'lucide-react';
+import { passkeyApi } from '../api/passkeyApi';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const { login } = useAuth();
+  const { login, setUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const justVerified = searchParams.get('verified') === '1';
@@ -54,6 +56,23 @@ export function LoginPage() {
     }
   };
 
+  const handlePasskeyLogin = async () => {
+    setIsPasskeyLoading(true);
+    try {
+      const authUser = await passkeyApi.loginWithPasskey(email.trim() || undefined);
+      setUser(authUser);
+      toast.success('Signed in with Passkey!');
+      navigate('/', { replace: true });
+    } catch (error: any) {
+      if (error?.name === 'NotAllowedError') {
+        return;
+      }
+      toast.error(apiErrorMessage(error, 'Passkey login failed'));
+    } finally {
+      setIsPasskeyLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 w-full max-w-md">
@@ -84,9 +103,14 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              Password
-            </label>
+            <div className="flex justify-between items-center mb-1">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <Link to="/password-reset" className="text-xs text-gray-500 hover:text-black">
+                Forgot password?
+              </Link>
+            </div>
             <input
               id="password"
               type="password"
@@ -100,13 +124,28 @@ export function LoginPage() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isPasskeyLoading}
             className="w-full bg-black text-white py-2.5 rounded-lg font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
             Sign In
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={handlePasskeyLogin}
+          disabled={isPasskeyLoading || isLoading}
+          aria-label="Continue with Passkey"
+          className="w-full mt-3 bg-white border border-gray-300 text-gray-800 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {isPasskeyLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <KeyRound className="w-4 h-4 text-gray-700" />
+          )}
+          Continue with Passkey
+        </button>
 
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
