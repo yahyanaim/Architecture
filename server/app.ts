@@ -17,6 +17,8 @@ import { CORS_ORIGINS, TRUST_PROXY, IS_PROD } from './config/index';
 
 import { swaggerSpec } from './config/swagger';
 import swaggerUi from 'swagger-ui-express';
+import { RedisStore } from 'rate-limit-redis';
+import { getRedisClient } from './infrastructure/redis';
 import { userRoutes } from './api/routes/userRoutes';
 import { authRoutes } from './api/routes/authRoutes';
 import { profileRoutes } from './api/routes/profileRoutes';
@@ -47,13 +49,21 @@ const app = express();
 // Configurable via `TRUST_PROXY` ('1' = one proxy, '0' = direct).
 app.set('trust proxy', TRUST_PROXY === '0' ? 0 : 1);
 
+const redisClient = getRedisClient();
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   message: 'Too many requests from this IP, please try again after 15 minutes',
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false }
+  validate: { xForwardedForHeader: false },
+  store: redisClient
+    ? new RedisStore({
+        sendCommand: (...args: string[]) => redisClient.call(args[0] || '', ...args.slice(1)) as any,
+        prefix: 'rl:api:',
+      })
+    : undefined,
 });
 
 app.use('/api', apiLimiter);
@@ -137,8 +147,9 @@ app.get('/api/health', (_req, res) => {
 // volumes are internal. Multi-instance prod should scrape a shared backend
 // (Prometheus/StatsD) instead — see `observability.ts`.
 const requireActiveUserOps = createRequireActiveUser(userRepository);
-app.get('/api/metrics', authenticate, requireActiveUserOps, authorizeAdmin, (_req, res) => {
-  res.json({ metrics: getMetricsSnapshot(), at: new Date().toISOString() });
+app.get('/api/metrics', authenticate, requireActiveUserOps, authorizeAdmin, async (_req, res) => {
+  const metrics = await getMetricsSnapshot();
+  res.json({ metrics, at: new Date().toISOString() });
 });
 
 // PRODUCTION LIFECYCLE: `npm run build` emits the Vite SPA into `dist/`.

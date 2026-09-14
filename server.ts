@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import { app } from "./server/app";
-import { PORT, IS_PROD, DATABASE_URL } from "./server/config/index";
+import { PORT, IS_PROD, DATABASE_URL, REDIS_URL } from "./server/config/index";
 import { migrate } from "./server/infrastructure/db/migrate";
 import { migratePg } from "./server/infrastructure/db/migratePg";
 import { closePgPool } from "./server/infrastructure/pg";
+import { closeRedis } from "./server/infrastructure/redis";
 import { jobQueue } from "./server/infrastructure/repositories/SharedUserRepository";
 import { logger } from "./server/infrastructure/observability";
 
@@ -51,6 +52,9 @@ async function startServer() {
     jobQueue.stopWorker();
     if (DATABASE_URL) {
       await closePgPool().catch(() => {});
+    }
+    if (REDIS_URL) {
+      await closeRedis().catch(() => {});
     }
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 5000).unref();

@@ -4,21 +4,40 @@ import { logger } from './observability';
 import { Mailer, Email } from './mailer';
 
 // ============================================================================
-// Durable background job queue (SQLite-backed).
+// Durable background job queue (SQLite / Postgres compatible).
 //
 // WHY: emails (verify/reset/invite), receipts, and webhooks must survive
 // restarts and never block HTTP responses — controllers `enqueue()` and
 // return immediately; `startWorker()` (called from `server.ts`, skipped in
 // tests) leases due rows, runs handlers, and retries with exponential
 // backoff. Exhausted jobs park in `dead` for inspection/replay instead of
-// vanishing. Single-process worker: for multi-instance prod, run ONE worker
-// process or add a `locked_by` lease column (noted, not implemented).
+// vanishing.
+//
+// MULTI-INSTANCE SAFETY:
+// Workers lease jobs using atomic `UPDATE ... WHERE status='queued' AND (locked_by IS NULL) RETURNING *`.
+// Each worker tags claimed jobs with its unique `workerId` and timestamp `locked_at`.
+// Zombie/crashed workers have their leases reclaimed after lease timeout (10m).
 // ============================================================================
 
 export type JobHandler = (payload: any) => Promise<void>;
 
 export interface EmailJobPayload extends Email {
   kind: 'verify' | 'reset' | 'invite' | 'welcome';
+}
+
+export interface JobRecord {
+  id: number;
+  type: string;
+  payload: string;
+  status: string;
+  run_at: string;
+  attempts: number;
+  max_attempts: number;
+  last_error: string | null;
+  locked_by: string | null;
+  locked_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 function now(): string {
@@ -28,11 +47,14 @@ function now(): string {
 export class JobQueue {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  readonly workerId: string;
 
   constructor(
     private readonly mailer: Mailer,
-    private readonly handlers: Record<string, JobHandler> = {}
+    private readonly handlers: Record<string, JobHandler> = {},
+    workerId?: string
   ) {
+    this.workerId = workerId ?? `worker-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
     // Built-in handler; domain-specific handlers can be registered via the
     // third constructor arg or `register()`.
     this.handlers['email.send'] ??= async (p: EmailJobPayload) => {
@@ -48,59 +70,85 @@ export class JobQueue {
     const at = (opts.runAt ?? new Date()).toISOString();
     const res = db
       .prepare(
-        'INSERT INTO jobs (type, payload, status, run_at, attempts, max_attempts, last_error, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, NULL, ?, ?)'
+        'INSERT INTO jobs (type, payload, status, run_at, attempts, max_attempts, last_error, locked_by, locked_at, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, NULL, NULL, NULL, ?, ?)'
       )
       .run(type, JSON.stringify(payload), 'queued', at, opts.maxAttempts ?? 5, now(), now());
     logger.debug('[jobs] enqueued', { type, id: res.lastInsertRowid });
     return Number(res.lastInsertRowid);
   }
 
+  /**
+   * Atomically claims the next due job for this worker instance.
+   * Uses atomic UPDATE ... WHERE status='queued' AND (locked_by IS NULL) RETURNING *
+   * to guarantee no double-execution across multiple instances.
+   */
+  claimNextJob(): JobRecord | undefined {
+    const currentTime = now();
+    const claimStmt = db.prepare(`
+      UPDATE jobs
+      SET status = 'running', locked_by = ?, locked_at = ?, updated_at = ?
+      WHERE id = (
+        SELECT id FROM jobs
+        WHERE status = 'queued'
+          AND (locked_by IS NULL)
+          AND run_at <= ?
+        ORDER BY id ASC
+        LIMIT 1
+      )
+      AND status = 'queued'
+      AND (locked_by IS NULL)
+      RETURNING *
+    `);
+    return claimStmt.get(this.workerId, currentTime, currentTime, currentTime) as JobRecord | undefined;
+  }
+
   /** Process all due jobs once. Public so tests/cron can drive it manually. */
-  async processDue(): Promise<number> {
+  async processDue(batchLimit = 20): Promise<number> {
     if (this.running) return 0;
     this.running = true;
     try {
       // Reclaim zombie jobs stuck in 'running' for > 10 minutes (e.g. crashed process)
       const zombieCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
-      db.prepare("UPDATE jobs SET status = 'queued', attempts = attempts + 1, updated_at = ? WHERE status = 'running' AND updated_at < ?")
-        .run(now(), zombieCutoff);
+      db.prepare(
+        "UPDATE jobs SET status = 'queued', attempts = attempts + 1, locked_by = NULL, locked_at = NULL, updated_at = ? WHERE status = 'running' AND (updated_at < ? OR locked_at < ?)"
+      ).run(now(), zombieCutoff, zombieCutoff);
 
-      const due = db
-        .prepare("SELECT * FROM jobs WHERE status = 'queued' AND run_at <= ? ORDER BY id ASC LIMIT 20")
-        .all(now()) as any[];
       let done = 0;
-      for (const job of due) {
+      for (let i = 0; i < batchLimit; i++) {
         // Atomic claim: only one worker transitions the job from 'queued' to 'running'
-        const claim = db
-          .prepare("UPDATE jobs SET status = 'running', updated_at = ? WHERE id = ? AND status = 'queued'")
-          .run(now(), job.id);
-        if (claim.changes === 0) continue; // Claimed by another worker
+        const job = this.claimNextJob();
+        if (!job) break; // No more due jobs to claim
 
         const handler = this.handlers[job.type];
         if (!handler) {
-          db.prepare("UPDATE jobs SET status = 'dead', last_error = ?, updated_at = ? WHERE id = ?")
+          db.prepare("UPDATE jobs SET status = 'dead', locked_by = NULL, locked_at = NULL, last_error = ?, updated_at = ? WHERE id = ?")
             .run(`no handler for type "${job.type}"`, now(), job.id);
           continue;
         }
+
         try {
           await handler(JSON.parse(job.payload));
-          db.prepare("UPDATE jobs SET status = 'done', updated_at = ? WHERE id = ?").run(now(), job.id);
+          db.prepare("UPDATE jobs SET status = 'done', locked_by = NULL, locked_at = NULL, updated_at = ? WHERE id = ?")
+            .run(now(), job.id);
           done += 1;
         } catch (err) {
           const attempts = job.attempts + 1;
           const backoffMin = Math.min(2 ** attempts, 60); // 2,4,8.. capped 60m
           const nextRun = new Date(Date.now() + backoffMin * 60_000).toISOString();
           if (attempts >= job.max_attempts) {
-            db.prepare("UPDATE jobs SET status = 'dead', attempts = ?, last_error = ?, updated_at = ? WHERE id = ?")
-              .run(attempts, (err as Error).message, now(), job.id);
+            db.prepare(
+              "UPDATE jobs SET status = 'dead', locked_by = NULL, locked_at = NULL, attempts = ?, last_error = ?, updated_at = ? WHERE id = ?"
+            ).run(attempts, (err as Error).message, now(), job.id);
             logger.error('[jobs] dead', { id: job.id, type: job.type, error: (err as Error).message });
           } else {
-            db.prepare("UPDATE jobs SET status = 'queued', attempts = ?, run_at = ?, last_error = ?, updated_at = ? WHERE id = ?")
-              .run(attempts, nextRun, (err as Error).message, now(), job.id);
+            db.prepare(
+              "UPDATE jobs SET status = 'queued', locked_by = NULL, locked_at = NULL, attempts = ?, run_at = ?, last_error = ?, updated_at = ? WHERE id = ?"
+            ).run(attempts, nextRun, (err as Error).message, now(), job.id);
             logger.warn('[jobs] retry scheduled', { id: job.id, type: job.type, attempt: attempts });
           }
         }
       }
+
       // Opportunistic cleanup of long-expired refresh rows is handled by
       // AuthService; jobs table keeps `done` rows 7d for audit, then prunes.
       db.prepare("DELETE FROM jobs WHERE status = 'done' AND updated_at < ?")
@@ -117,7 +165,7 @@ export class JobQueue {
       void this.processDue().catch((e) => logger.error('[jobs] worker tick failed', { error: (e as Error).message }));
     }, intervalMs);
     this.timer.unref?.(); // never keep the process alive on its own
-    logger.info('[jobs] worker started', { intervalMs });
+    logger.info('[jobs] worker started', { workerId: this.workerId, intervalMs });
   }
 
   stopWorker(): void {

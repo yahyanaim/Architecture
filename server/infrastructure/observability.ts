@@ -49,8 +49,8 @@ export function reportError(err: Error, ctx: Record<string, unknown> = {}): void
   }
 }
 
-// -- In-memory request metrics (per-process; scrape via GET /api/metrics).
-// For multi-instance prod, replace with a StatsD/Prometheus client here —
+// -- Request metrics (in-memory per-process fallback; Redis hash across multi-instance).
+// For cloud/Kubernetes setups, scrape Prometheus text format or push to OpenTelemetry.
 interface RouteStat { count: number; errors: number; totalMs: number }
 const stats = new Map<string, RouteStat>();
 
@@ -60,16 +60,68 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
     const route = req.route?.path
       ? `${req.method} ${req.baseUrl + req.route.path}`
       : `${req.method} [unmatched]`;
+    const duration = Date.now() - start;
+
+    // Local in-memory counter
     const s = stats.get(route) ?? { count: 0, errors: 0, totalMs: 0 };
     s.count += 1;
     if (res.statusCode >= 500) s.errors += 1;
-    s.totalMs += Date.now() - start;
+    s.totalMs += duration;
     stats.set(route, s);
+
+    // Multi-instance distributed counters via Redis
+    try {
+      // Lazy import / check to avoid circular dependencies
+      const { getRedisClient } = require('./redis');
+      const redis = getRedisClient?.();
+      if (redis) {
+        const pipeline = redis.pipeline();
+        pipeline.hincrby('metrics:count', route, 1);
+        if (res.statusCode >= 500) {
+          pipeline.hincrby('metrics:errors', route, 1);
+        }
+        pipeline.hincrby('metrics:total_ms', route, duration);
+        pipeline.exec().catch(() => {});
+      }
+    } catch {
+      // Fail-soft: metric recording must never disrupt requests
+    }
   });
   next();
 }
 
-export function getMetricsSnapshot(): Record<string, { count: number; errors: number; avgMs: number }> {
+/**
+ * Returns a consolidated snapshot of route metrics.
+ * Reads from shared Redis hash if REDIS_URL is configured, else returns in-memory stats.
+ */
+export async function getMetricsSnapshot(): Promise<Record<string, { count: number; errors: number; avgMs: number }>> {
+  try {
+    const { getRedisClient } = require('./redis');
+    const redis = getRedisClient?.();
+    if (redis) {
+      const [counts, errors, totalMs] = await Promise.all([
+        redis.hgetall('metrics:count'),
+        redis.hgetall('metrics:errors'),
+        redis.hgetall('metrics:total_ms'),
+      ]);
+      const routes = new Set([...Object.keys(counts), ...Object.keys(errors), ...Object.keys(totalMs)]);
+      const out: Record<string, { count: number; errors: number; avgMs: number }> = {};
+      for (const route of routes) {
+        const count = parseInt(counts[route] || '0', 10);
+        const errCount = parseInt(errors[route] || '0', 10);
+        const ms = parseInt(totalMs[route] || '0', 10);
+        out[route] = {
+          count,
+          errors: errCount,
+          avgMs: count > 0 ? Math.round(ms / count) : 0,
+        };
+      }
+      return out;
+    }
+  } catch {
+    // fallback to local stats below
+  }
+
   const out: Record<string, { count: number; errors: number; avgMs: number }> = {};
   for (const [route, s] of stats) {
     out[route] = { count: s.count, errors: s.errors, avgMs: s.count ? Math.round(s.totalMs / s.count) : 0 };

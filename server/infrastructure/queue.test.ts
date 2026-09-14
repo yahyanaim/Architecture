@@ -61,4 +61,27 @@ describe('job queue', () => {
     const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id) as any;
     expect(row.status).toBe('done');
   });
+
+  it('prevents double job execution across concurrent worker instances via atomic lease', async () => {
+    const q1 = new JobQueue({ send: async () => undefined }, {}, 'worker-instance-1');
+    const q2 = new JobQueue({ send: async () => undefined }, {}, 'worker-instance-2');
+
+    const id = await q1.enqueue('concurrent.task', { test: true });
+
+    // Worker 1 claims the job
+    const claim1 = q1.claimNextJob();
+    expect(claim1).toBeDefined();
+    expect(claim1?.id).toBe(id);
+    expect(claim1?.locked_by).toBe('worker-instance-1');
+    expect(claim1?.status).toBe('running');
+
+    // Worker 2 attempts to claim at the same time: must be rejected (returns undefined)
+    const claim2 = q2.claimNextJob();
+    expect(claim2).toBeUndefined();
+
+    // Verify database state: locked by worker 1
+    const row = db.prepare('SELECT status, locked_by FROM jobs WHERE id = ?').get(id) as any;
+    expect(row.status).toBe('running');
+    expect(row.locked_by).toBe('worker-instance-1');
+  });
 });
