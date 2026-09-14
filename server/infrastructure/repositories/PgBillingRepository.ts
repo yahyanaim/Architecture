@@ -1,5 +1,6 @@
+import crypto from 'crypto';
 import { PostgresExecutor, pgExecutor } from '../pg';
-import { IOrganizationRepository, ISubscriptionRepository } from '../../domain/interfaces/ITenant';
+import { IOrganizationRepository, ISubscriptionRepository, IUsageRepository, UsageEvent } from '../../domain/interfaces/ITenant';
 import { Organization, OrgStatus } from '../../domain/entities/Organization';
 import { Subscription, Plan, SubscriptionStatus } from '../../domain/entities/Subscription';
 
@@ -27,9 +28,19 @@ interface SubRow {
   current_period_end: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
+  seats?: number | string;
 }
 
-export class PgBillingRepository implements IOrganizationRepository, ISubscriptionRepository {
+interface UsageEventRow {
+  id: string;
+  org_id: string;
+  event_name: string;
+  quantity: number | string;
+  idempotency_key: string | null;
+  timestamp: string | Date;
+}
+
+export class PgBillingRepository implements IOrganizationRepository, ISubscriptionRepository, IUsageRepository {
   private db: PostgresExecutor;
 
   constructor(db?: PostgresExecutor) {
@@ -75,8 +86,8 @@ export class PgBillingRepository implements IOrganizationRepository, ISubscripti
     }
 
     const query = `
-      INSERT INTO subscriptions (org_id, plan, status, provider, provider_ref, customer_ref, grace_until, current_period_end, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO subscriptions (org_id, plan, status, provider, provider_ref, customer_ref, grace_until, current_period_end, created_at, updated_at, seats)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       ON CONFLICT(org_id) DO UPDATE SET
         plan = EXCLUDED.plan,
         status = EXCLUDED.status,
@@ -85,7 +96,8 @@ export class PgBillingRepository implements IOrganizationRepository, ISubscripti
         customer_ref = EXCLUDED.customer_ref,
         grace_until = EXCLUDED.grace_until,
         current_period_end = EXCLUDED.current_period_end,
-        updated_at = EXCLUDED.updated_at
+        updated_at = EXCLUDED.updated_at,
+        seats = EXCLUDED.seats
     `;
     await this.db.query(query, [
       entity.orgId,
@@ -97,7 +109,8 @@ export class PgBillingRepository implements IOrganizationRepository, ISubscripti
       entity.graceUntil?.toISOString() ?? null,
       entity.currentPeriodEnd?.toISOString() ?? null,
       entity.createdAt.toISOString(),
-      now()
+      now(),
+      entity.seats ?? 5
     ]);
   }
 
@@ -132,7 +145,8 @@ export class PgBillingRepository implements IOrganizationRepository, ISubscripti
       new Date(r.created_at),
       new Date(r.updated_at),
       r.customer_ref ?? null,
-      r.grace_until ? new Date(r.grace_until) : null
+      r.grace_until ? new Date(r.grace_until) : null,
+      Number(r.seats ?? 5)
     );
   }
 
@@ -151,6 +165,68 @@ export class PgBillingRepository implements IOrganizationRepository, ISubscripti
     }
 
     return sub;
+  }
+
+  // -- metered usage tracking --
+  async recordUsage(event: {
+    orgId: string;
+    eventName: string;
+    quantity?: number;
+    idempotencyKey?: string | null;
+    timestamp?: Date;
+  }): Promise<UsageEvent> {
+    const id = crypto.randomUUID();
+    const qty = event.quantity ?? 1;
+    const ts = (event.timestamp ?? new Date()).toISOString();
+    const idem = event.idempotencyKey ?? null;
+
+    if (idem) {
+      const existing = await this.db.query<UsageEventRow>(
+        'SELECT * FROM usage_events WHERE org_id = $1 AND idempotency_key = $2',
+        [event.orgId, idem]
+      );
+      if (existing.rows[0]) {
+        const r = existing.rows[0];
+        return {
+          id: r.id,
+          orgId: r.org_id,
+          eventName: r.event_name,
+          quantity: Number(r.quantity),
+          idempotencyKey: r.idempotency_key,
+          timestamp: new Date(r.timestamp),
+        };
+      }
+    }
+
+    await this.db.query(
+      `INSERT INTO usage_events (id, org_id, event_name, quantity, idempotency_key, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, event.orgId, event.eventName, qty, idem, ts]
+    );
+
+    return {
+      id,
+      orgId: event.orgId,
+      eventName: event.eventName,
+      quantity: qty,
+      idempotencyKey: idem,
+      timestamp: new Date(ts),
+    };
+  }
+
+  async getUsage(orgId: string, eventName: string, since?: Date): Promise<number> {
+    if (since) {
+      const res = await this.db.query<{ total: string | number }>(
+        'SELECT COALESCE(SUM(quantity), 0) AS total FROM usage_events WHERE org_id = $1 AND event_name = $2 AND timestamp >= $3',
+        [orgId, eventName, since.toISOString()]
+      );
+      return Number(res.rows[0]?.total ?? 0);
+    }
+    const res = await this.db.query<{ total: string | number }>(
+      'SELECT COALESCE(SUM(quantity), 0) AS total FROM usage_events WHERE org_id = $1 AND event_name = $2',
+      [orgId, eventName]
+    );
+    return Number(res.rows[0]?.total ?? 0);
   }
 }
 

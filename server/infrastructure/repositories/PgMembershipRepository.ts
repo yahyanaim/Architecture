@@ -105,6 +105,14 @@ export class PgMembershipRepository implements IMembershipRepository {
     );
     return Number(res.rows[0]?.n ?? 0);
   }
+
+  async countByOrg(orgId: string): Promise<number> {
+    const res = await this.db.query<{ n: string | number }>(
+      'SELECT COUNT(*) AS n FROM memberships WHERE org_id = $1',
+      [orgId]
+    );
+    return Number(res.rows[0]?.n ?? 0);
+  }
 }
 
 export { PgMembershipRepository as PostgresMembershipRepository };

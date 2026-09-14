@@ -73,3 +73,23 @@ export interface ITokenStore {
   /** Atomically marks the token used and returns it; null if unknown/used/expired. */
   consumeAuthToken(tokenHash: string, type: AuthTokenType): Promise<AuthToken | null>;
 }
+
+export interface UsageEvent {
+  id: string;
+  orgId: string;
+  eventName: string;
+  quantity: number;
+  idempotencyKey?: string | null;
+  timestamp: Date;
+}
+
+export interface IUsageRepository {
+  recordUsage(event: {
+    orgId: string;
+    eventName: string;
+    quantity?: number;
+    idempotencyKey?: string | null;
+    timestamp?: Date;
+  }): Promise<UsageEvent>;
+  getUsage(orgId: string, eventName: string, since?: Date): Promise<number>;
+}

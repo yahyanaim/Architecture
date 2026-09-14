@@ -14,6 +14,18 @@ export interface SubscriptionInfo {
   /** Dunning grace expiry (ISO) or null — show "update payment method" while set. */
   graceUntil: string | null;
   hasPaymentMethod: boolean;
+  seats: number;
+  usedSeats: number;
+}
+
+export interface InvoiceInfo {
+  id: string;
+  number: string;
+  amount: number;
+  currency: string;
+  status: 'paid' | 'open' | 'past_due';
+  date: string;
+  pdfUrl: string | null;
 }
 
 /**
@@ -35,14 +47,26 @@ export const billingApi = {
   },
 
   /** Creates a Stripe Checkout Session; caller redirects to the returned URL. */
-  createCheckout: async (plan: 'pro' | 'enterprise'): Promise<{ url: string }> => {
-    const response = await apiClient.post('/billing/checkout', { plan });
+  createCheckout: async (plan: 'pro' | 'enterprise', seats?: number): Promise<{ url: string }> => {
+    const response = await apiClient.post('/billing/checkout', { plan, seats });
     return response.data;
   },
 
   /** Creates a Stripe customer-portal session for self-serve management. */
   createPortal: async (): Promise<{ url: string }> => {
     const response = await apiClient.post('/billing/portal');
+    return response.data;
+  },
+
+  /** Updates workspace seat allocation directly. */
+  updateSeats: async (seats: number): Promise<SubscriptionInfo> => {
+    const response = await apiClient.post('/billing/seats', { seats });
+    return response.data;
+  },
+
+  /** Lists past workspace invoices. */
+  getInvoices: async (): Promise<InvoiceInfo[]> => {
+    const response = await apiClient.get('/billing/invoices');
     return response.data;
   },
 };

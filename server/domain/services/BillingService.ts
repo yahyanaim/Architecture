@@ -54,7 +54,7 @@ export class BillingService {
 
   /** checkout.session.completed: wire the Stripe subscription to our org. */
   async completeCheckout(input: {
-    orgId: string; plan: Plan; subscriptionId: string; customerId: string | null;
+    orgId: string; plan: Plan; subscriptionId: string; customerId: string | null; seats?: number;
   }): Promise<Subscription> {
     const sub = await this.forOrg(input.orgId);
     sub.plan = input.plan;
@@ -62,6 +62,7 @@ export class BillingService {
     sub.provider = 'stripe';
     sub.providerRef = input.subscriptionId;
     if (input.customerId) sub.customerRef = input.customerId;
+    if (input.seats !== undefined) sub.seats = input.seats;
     sub.graceUntil = null;
     await this.touch(sub);
 
@@ -76,12 +77,15 @@ export class BillingService {
 
   /** customer.subscription.updated: mirror status/plan (price change = plan change). */
   async syncSubscription(input: {
-    subscriptionId: string; stripeStatus: string; pricePlan: Plan | null;
+    subscriptionId: string; stripeStatus: string; pricePlan: Plan | null; seats?: number;
   }): Promise<Subscription> {
     const sub = await this.forSubscription(input.subscriptionId);
     const mapped = mapStripeStatus(input.stripeStatus);
     sub.status = mapped.status;
     sub.graceUntil = mapped.grace ? new Date(Date.now() + DUNNING_GRACE_MS) : null;
+    if (input.seats !== undefined) {
+      sub.seats = input.seats;
+    }
     // Unknown price ids NEVER downgrade/upgrade blindly — keep current plan.
     if (input.pricePlan) {
       sub.plan = input.pricePlan;
@@ -91,6 +95,15 @@ export class BillingService {
         await this.orgs.save(org);
       }
     }
+    await this.touch(sub);
+    return sub;
+  }
+
+  /** Direct seat adjustment (e.g. from seats slider in billing settings). */
+  async updateSeats(orgId: string, seats: number): Promise<Subscription> {
+    if (seats < 1) throw new BusinessException('Seats must be at least 1');
+    const sub = await this.forOrg(orgId);
+    sub.seats = seats;
     await this.touch(sub);
     return sub;
   }

@@ -109,4 +109,20 @@ describe('BillingService', () => {
     expect(mapStripeStatus('canceled')).toEqual({ status: 'canceled', grace: false });
     expect(mapStripeStatus('weird_future_status')).toEqual({ status: 'incomplete', grace: false });
   });
+
+  it('completeCheckout sets seat count if provided', async () => {
+    const sub = await svc.completeCheckout({ orgId: 'o1', plan: 'pro', subscriptionId: 'sub_1', customerId: 'cus_1', seats: 12 });
+    expect(sub.seats).toBe(12);
+  });
+
+  it('syncSubscription updates seats on Stripe webhook quantity change', async () => {
+    await svc.completeCheckout({ orgId: 'o1', plan: 'pro', subscriptionId: 'sub_1', customerId: 'cus_1', seats: 5 });
+    const updated = await svc.syncSubscription({ subscriptionId: 'sub_1', stripeStatus: 'active', pricePlan: 'pro', seats: 20 });
+    expect(updated.seats).toBe(20);
+  });
+
+  it('updateSeats modifies seats directly', async () => {
+    const updated = await svc.updateSeats('o1', 15);
+    expect(updated.seats).toBe(15);
+  });
 });

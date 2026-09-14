@@ -5,14 +5,17 @@ import {
   userRepository,
   tokenStore,
   membershipRepository,
+  subscriptionRepository,
   jobQueue,
 } from '../../infrastructure/repositories/SharedUserRepository';
 import { authenticate } from '../middleware/authenticate';
 import { createRequireActiveUser } from '../middleware/requireActiveUser';
 import { resolveTenant } from '../middleware/resolveTenant';
 import { authorizeAdmin } from '../middleware/authorize';
+import { createRequirePlan } from '../middleware/requirePlan';
 
 const router = Router();
+const requirePlan = createRequirePlan(subscriptionRepository, membershipRepository);
 
 // ==========================================
 // Inversion of Control (IoC) Wiring
@@ -77,7 +80,7 @@ const userController = new UserController(userService, jobQueue);
  *       403:
  *         description: 'Forbidden: Admin access required'
  */
-router.post('/', authenticate, requireActiveUser, resolveTenant, authorizeAdmin, userController.createUser);
+router.post('/', authenticate, requireActiveUser, resolveTenant, authorizeAdmin, requirePlan({ enforceSeats: true }), userController.createUser);
 
 /**
  * @swagger

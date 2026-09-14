@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { db } from './database';
 import { logger } from './observability';
 import { Mailer, Email } from './mailer';
+import { APP_URL } from '../config/index';
 
 // ============================================================================
 // Durable background job queue (SQLite / Postgres compatible).
@@ -22,7 +23,7 @@ import { Mailer, Email } from './mailer';
 export type JobHandler = (payload: any) => Promise<void>;
 
 export interface EmailJobPayload extends Email {
-  kind: 'verify' | 'reset' | 'invite' | 'welcome';
+  kind: 'verify' | 'reset' | 'invite' | 'welcome' | 'dunning';
 }
 
 export interface JobRecord {
@@ -59,6 +60,32 @@ export class JobQueue {
     // third constructor arg or `register()`.
     this.handlers['email.send'] ??= async (p: EmailJobPayload) => {
       await this.mailer.send(p);
+    };
+
+    this.handlers['billing.dunning'] ??= async (p: {
+      orgId: string;
+      subscriptionId: string;
+      email: string;
+      day: number;
+      graceUntil?: string;
+    }) => {
+      let subject = '';
+      let text = '';
+      if (p.day === 0) {
+        subject = 'Action Required: Payment Failed (7-Day Grace Period Active)';
+        text = `Your subscription payment failed. Your workspace keeps working during a 7-day grace period. Please update your payment method: ${APP_URL}/billing`;
+      } else if (p.day === 3) {
+        subject = 'Reminder: 4 Days Remaining on Your Workspace Grace Period';
+        text = `Your payment is still pending. 4 days remain before your workspace access is suspended. Please update your payment method: ${APP_URL}/billing`;
+      } else {
+        subject = 'Workspace Suspended: Grace Period Expired';
+        text = `Your 7-day grace period has expired and paid workspace access has been suspended. Please update your payment method to restore access: ${APP_URL}/billing`;
+      }
+      await this.mailer.send({
+        to: p.email,
+        subject,
+        text,
+      });
     };
   }
 

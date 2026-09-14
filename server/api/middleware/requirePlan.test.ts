@@ -76,4 +76,54 @@ describe('requirePlan', () => {
     expect(r.status).toHaveBeenCalledWith(403);
     expect(next2).not.toHaveBeenCalled();
   });
+
+  it('enforceSeats: allows invite when under seat limit', async () => {
+    const sub = new Subscription('o1', 'pro', 'active');
+    sub.seats = 5;
+    const subRepo = { async findByOrgId() { return sub; } } as unknown as ISubscriptionRepository;
+    const memRepo = { async countByOrg() { return 3; } } as any;
+
+    const gate = createRequirePlan(subRepo, memRepo)({ enforceSeats: true });
+    const next = vi.fn();
+    await gate(reqWithTenant('o1'), res(), next);
+    expect(next).toHaveBeenCalled();
+  });
+
+  it('enforceSeats: 403s with upgrade_required and seat_limit_exceeded when seats limit is reached', async () => {
+    const sub = new Subscription('o1', 'pro', 'active');
+    sub.seats = 5;
+    const subRepo = { async findByOrgId() { return sub; } } as unknown as ISubscriptionRepository;
+    const memRepo = { async countByOrg() { return 5; } } as any;
+
+    const gate = createRequirePlan(subRepo, memRepo)({ enforceSeats: true });
+    const r = res();
+    const next = vi.fn();
+    await gate(reqWithTenant('o1'), r, next);
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(r.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'upgrade_required',
+      reason: 'seat_limit_exceeded',
+      seats: 5,
+      currentSeats: 5,
+    }));
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('enforceSeats: 403s when subscription grace expired even if under seat limit', async () => {
+    const sub = new Subscription('o1', 'pro', 'past_due');
+    sub.graceUntil = new Date(Date.now() - 1000);
+    sub.seats = 10;
+    const subRepo = { async findByOrgId() { return sub; } } as unknown as ISubscriptionRepository;
+    const memRepo = { async countByOrg() { return 2; } } as any;
+
+    const gate = createRequirePlan(subRepo, memRepo)({ enforceSeats: true });
+    const r = res();
+    const next = vi.fn();
+    await gate(reqWithTenant('o1'), r, next);
+    expect(r.status).toHaveBeenCalledWith(403);
+    expect(r.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'upgrade_required',
+    }));
+    expect(next).not.toHaveBeenCalled();
+  });
 });

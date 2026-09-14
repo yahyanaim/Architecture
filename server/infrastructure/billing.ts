@@ -75,6 +75,7 @@ export interface CheckoutInput {
   priceId: string;
   customerEmail: string;
   customerId?: string;
+  quantity?: number;
   successUrl: string;
   cancelUrl: string;
 }
@@ -88,15 +89,18 @@ export class StripeClient {
 
   /** Creates a subscription Checkout Session; metadata ties it back to us. */
   async createCheckoutSession(input: CheckoutInput): Promise<{ id: string; url: string }> {
+    const qty = String(input.quantity ?? 1);
     const params: Record<string, string> = {
       mode: 'subscription',
       'line_items[0][price]': input.priceId,
-      'line_items[0][quantity]': '1',
+      'line_items[0][quantity]': qty,
       client_reference_id: input.orgId,
       'metadata[orgId]': input.orgId,
       'metadata[plan]': input.plan,
+      'metadata[seats]': qty,
       'subscription_data[metadata][orgId]': input.orgId,
       'subscription_data[metadata][plan]': input.plan,
+      'subscription_data[metadata][seats]': qty,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
     };
@@ -118,6 +122,12 @@ export class StripeClient {
   /** Fetches a subscription (used when the webhook object lacks metadata). */
   async getSubscription(subscriptionId: string): Promise<any> {
     return stripeFetch(this.secretKey, 'GET', `/v1/subscriptions/${subscriptionId}`);
+  }
+
+  /** Fetches invoices for a Stripe customer. */
+  async listInvoices(customerId: string, limit = 10): Promise<any[]> {
+    const res = await stripeFetch(this.secretKey, 'GET', `/v1/invoices?customer=${customerId}&limit=${limit}`);
+    return res?.data ?? [];
   }
 }
 

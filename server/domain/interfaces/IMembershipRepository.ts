@@ -13,4 +13,5 @@ export interface IMembershipRepository {
   save(membership: Membership): Promise<void>;
   delete(userId: string, orgId: string): Promise<void>;
   countAdminsByOrg(orgId: string): Promise<number>;
+  countByOrg(orgId: string): Promise<number>;
 }

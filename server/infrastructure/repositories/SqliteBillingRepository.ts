@@ -1,5 +1,6 @@
+import crypto from 'crypto';
 import { db } from '../database';
-import { IOrganizationRepository, ISubscriptionRepository } from '../../domain/interfaces/ITenant';
+import { IOrganizationRepository, ISubscriptionRepository, IUsageRepository, UsageEvent } from '../../domain/interfaces/ITenant';
 import { Organization, OrgStatus } from '../../domain/entities/Organization';
 import { Subscription, Plan, SubscriptionStatus } from '../../domain/entities/Subscription';
 
@@ -12,7 +13,7 @@ function now(): string {
  * are tiny org-scoped lookups over the same tables; split them if either
  * grows provider-specific behavior (e.g. Stripe webhook writes).
  */
-export class SqliteBillingRepository implements IOrganizationRepository, ISubscriptionRepository {
+export class SqliteBillingRepository implements IOrganizationRepository, ISubscriptionRepository, IUsageRepository {
   // -- organizations --
   async findById(id: string): Promise<Organization | null> {
     const r = db.prepare('SELECT * FROM organizations WHERE id = ?').get(id) as any;
@@ -39,16 +40,17 @@ export class SqliteBillingRepository implements IOrganizationRepository, ISubscr
       return;
     }
     db.prepare(
-      `INSERT INTO subscriptions (org_id, plan, status, provider, provider_ref, customer_ref, grace_until, current_period_end, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO subscriptions (org_id, plan, status, provider, provider_ref, customer_ref, grace_until, current_period_end, created_at, updated_at, seats)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(org_id) DO UPDATE SET plan=excluded.plan, status=excluded.status, provider=excluded.provider,
          provider_ref=excluded.provider_ref, customer_ref=excluded.customer_ref, grace_until=excluded.grace_until,
-         current_period_end=excluded.current_period_end, updated_at=excluded.updated_at`
+         current_period_end=excluded.current_period_end, updated_at=excluded.updated_at, seats=excluded.seats`
     ).run(
       entity.orgId, entity.plan, entity.status, entity.provider, entity.providerRef,
       entity.customerRef, entity.graceUntil?.toISOString() ?? null,
       entity.currentPeriodEnd?.toISOString() ?? null,
-      entity.createdAt.toISOString(), now()
+      entity.createdAt.toISOString(), now(),
+      entity.seats ?? 5
     );
   }
 
@@ -79,7 +81,8 @@ export class SqliteBillingRepository implements IOrganizationRepository, ISubscr
       r.current_period_end ? new Date(r.current_period_end) : null,
       new Date(r.created_at), new Date(r.updated_at),
       r.customer_ref ?? null,
-      r.grace_until ? new Date(r.grace_until) : null
+      r.grace_until ? new Date(r.grace_until) : null,
+      r.seats ?? 5
     );
   }
 
@@ -98,5 +101,66 @@ export class SqliteBillingRepository implements IOrganizationRepository, ISubscr
     }
 
     return sub;
+  }
+
+  // -- metered usage tracking --
+  async recordUsage(event: {
+    orgId: string;
+    eventName: string;
+    quantity?: number;
+    idempotencyKey?: string | null;
+    timestamp?: Date;
+  }): Promise<UsageEvent> {
+    const id = crypto.randomUUID();
+    const qty = event.quantity ?? 1;
+    const ts = (event.timestamp ?? new Date()).toISOString();
+    const idem = event.idempotencyKey ?? null;
+
+    if (idem) {
+      const existing = db
+        .prepare('SELECT * FROM usage_events WHERE org_id = ? AND idempotency_key = ?')
+        .get(event.orgId, idem) as any;
+      if (existing) {
+        return {
+          id: existing.id,
+          orgId: existing.org_id,
+          eventName: existing.event_name,
+          quantity: existing.quantity,
+          idempotencyKey: existing.idempotency_key,
+          timestamp: new Date(existing.timestamp),
+        };
+      }
+    }
+
+    db.prepare(
+      `INSERT INTO usage_events (id, org_id, event_name, quantity, idempotency_key, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(id, event.orgId, event.eventName, qty, idem, ts);
+
+    return {
+      id,
+      orgId: event.orgId,
+      eventName: event.eventName,
+      quantity: qty,
+      idempotencyKey: idem,
+      timestamp: new Date(ts),
+    };
+  }
+
+  async getUsage(orgId: string, eventName: string, since?: Date): Promise<number> {
+    if (since) {
+      const r = db
+        .prepare(
+          'SELECT COALESCE(SUM(quantity), 0) AS total FROM usage_events WHERE org_id = ? AND event_name = ? AND timestamp >= ?'
+        )
+        .get(orgId, eventName, since.toISOString()) as any;
+      return Number(r?.total ?? 0);
+    }
+    const r = db
+      .prepare(
+        'SELECT COALESCE(SUM(quantity), 0) AS total FROM usage_events WHERE org_id = ? AND event_name = ?'
+      )
+      .get(orgId, eventName) as any;
+    return Number(r?.total ?? 0);
   }
 }

@@ -52,7 +52,7 @@ export const ERROR_WEBHOOK_URL = process.env.ERROR_WEBHOOK_URL || '';
 // rejects everything (no secret = cannot verify). Price ids map Stripe
 // prices to our plans (see priceToPlan in infrastructure/billing.ts).
 export const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
-export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || (NODE_ENV === 'test' ? 'whsec_test_secret' : '');
 export const STRIPE_PRICE_PRO = process.env.STRIPE_PRICE_PRO || '';
 export const STRIPE_PRICE_ENTERPRISE = process.env.STRIPE_PRICE_ENTERPRISE || '';
 

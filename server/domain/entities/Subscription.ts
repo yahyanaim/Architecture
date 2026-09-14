@@ -29,7 +29,8 @@ export class Subscription {
     public readonly createdAt: Date = new Date(),
     public updatedAt: Date = new Date(),
     public customerRef: string | null = null,
-    public graceUntil: Date | null = null
+    public graceUntil: Date | null = null,
+    public seats: number = 5
   ) {}
 
   isActive(): boolean {

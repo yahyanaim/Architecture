@@ -133,6 +133,9 @@ class MemMemberships implements IMembershipRepository {
   async countAdminsByOrg(orgId: string): Promise<number> {
     return Array.from(this.map.values()).filter((m) => m.orgId === orgId && m.role === 'admin').length || 1;
   }
+  async countByOrg(orgId: string): Promise<number> {
+    return Array.from(this.map.values()).filter((m) => m.orgId === orgId).length;
+  }
   async updateRole(userId: string, orgId: string, role: MembershipRole): Promise<void> {
     const m = await this.findByUserAndOrg(userId, orgId);
     if (m) m.role = role;

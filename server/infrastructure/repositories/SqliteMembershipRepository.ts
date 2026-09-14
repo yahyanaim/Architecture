@@ -93,4 +93,11 @@ export class SqliteMembershipRepository implements IMembershipRepository {
       .get(orgId) as { n: number };
     return row.n;
   }
+
+  async countByOrg(orgId: string): Promise<number> {
+    const row = db
+      .prepare('SELECT COUNT(*) AS n FROM memberships WHERE org_id = ?')
+      .get(orgId) as { n: number };
+    return row.n;
+  }
 }
