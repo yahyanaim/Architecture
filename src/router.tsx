@@ -32,6 +32,9 @@ const InvitePage = lazy(() =>
 const ResetPasswordPage = lazy(() =>
   import('@/features/auth/pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage }))
 );
+const ForgotPasswordPage = lazy(() =>
+  import('@/features/auth/pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage }))
+);
 const WorkspacesPage = lazy(() =>
   import('@/features/workspaces/pages/WorkspacesPage').then((m) => ({ default: m.WorkspacesPage }))
 );
@@ -89,6 +92,8 @@ const TITLES: Record<string, string> = {
   '/admin/audit-logs': 'Audit Logs — Clean Architecture',
   '/invite': 'Accept invite — Clean Architecture',
   '/reset-password': 'Reset password — Clean Architecture',
+  '/forgot-password': 'Forgot password — Clean Architecture',
+  '/password-reset': 'Reset password — Clean Architecture',
 };
 
 function RouteChrome() {
@@ -239,9 +244,11 @@ export const router = createBrowserRouter([
         element: <GuestOnly />,
         children: [{ index: true, element: <RegisterPage /> }],
       },
-      // Token links from emails (public by design — the token IS the credential).
+      // Token links from emails and password-reset flows
       { path: '/invite', element: <Suspense fallback={<Loading />}><InvitePage /></Suspense> },
+      { path: '/forgot-password', element: <Suspense fallback={<Loading />}><ForgotPasswordPage /></Suspense> },
       { path: '/reset-password', element: <Suspense fallback={<Loading />}><ResetPasswordPage /></Suspense> },
+      { path: '/password-reset', element: <Suspense fallback={<Loading />}><ResetPasswordPage /></Suspense> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },

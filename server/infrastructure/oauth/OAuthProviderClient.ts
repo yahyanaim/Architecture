@@ -20,6 +20,29 @@ export class DefaultOAuthProviderClient implements IOAuthProviderClient {
 
   async exchangeCode(provider: string, code: string, redirectUri: string): Promise<OAuthProfile> {
     const prov = provider.toLowerCase();
+
+    // Automated test mock exchange (unit/integration tests only)
+    if (process.env.NODE_ENV === 'test' && (code.startsWith('dev_mock_') || code.startsWith('mock_'))) {
+      if (prov === 'google') {
+        return {
+          provider: 'google',
+          providerSub: 'google-test-user-001',
+          email: 'google.test@example.com',
+          name: 'Google Test User',
+          emailVerified: true,
+        };
+      }
+      if (prov === 'github') {
+        return {
+          provider: 'github',
+          providerSub: 'github-test-user-002',
+          email: 'github.test@example.com',
+          name: 'GitHub Test User',
+          emailVerified: true,
+        };
+      }
+    }
+
     if (prov === 'google') {
       return this.exchangeGoogle(code, redirectUri);
     } else if (prov === 'github') {

@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { apiErrorMessage } from '@/lib/errors';
 
+import { ForgotPasswordPage } from './ForgotPasswordPage';
+
 // Deep link from reset emails: /reset-password?token=… (public — the token
 // IS the credential; single-use, 1h expiry, enforced server-side).
 export function ResetPasswordPage() {
@@ -15,6 +17,11 @@ export function ResetPasswordPage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+
+  // If no token is provided in the query string, show the request-reset form
+  if (!token) {
+    return <ForgotPasswordPage />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,20 +45,6 @@ export function ResetPasswordPage() {
       setIsLoading(false);
     }
   };
-
-  if (!token) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 w-full max-w-md text-center">
-          <h1 className="text-xl font-bold text-black">Invalid reset link</h1>
-          <p className="text-gray-500 mt-2 text-sm">This link is missing its token. Check your email for the full URL.</p>
-          <Link to="/login" className="text-black font-medium hover:underline text-sm mt-4 inline-block">
-            Back to sign in
-          </Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -98,6 +91,11 @@ export function ResetPasswordPage() {
             Reset password
           </button>
         </form>
+        <div className="mt-6 text-center">
+          <Link to="/login" className="text-sm font-medium text-black hover:underline">
+            Back to sign in
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -31,6 +31,7 @@ import {
   RP_NAME,
   RP_ID,
   RP_ORIGIN,
+  CORS_ORIGINS,
 } from '../../config/index';
 
 const router = Router();
@@ -100,6 +101,8 @@ const oauthService = new OAuthService(
 const requireActiveUser = createRequireActiveUser(userRepository);
 const authController = new AuthController(authService, jobQueue, oauthService);
 
+const allowedRpOrigins = Array.from(new Set([RP_ORIGIN, ...CORS_ORIGINS].filter(Boolean)));
+
 const passkeyService = new PasskeyService(
   passkeyRepository,
   userRepository,
@@ -107,7 +110,7 @@ const passkeyService = new PasskeyService(
   {
     rpName: RP_NAME,
     rpID: RP_ID,
-    rpOrigin: RP_ORIGIN,
+    rpOrigin: allowedRpOrigins,
   }
 );
 const passkeyController = new PasskeyController(passkeyService);

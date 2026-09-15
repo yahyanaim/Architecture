@@ -5,6 +5,7 @@ import { validatePassword } from '../lib/password';
 import { apiErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { GoogleIcon, GitHubIcon } from '../components/AuthIcons';
 
 export function RegisterPage() {
   const [name, setName] = useState('');
@@ -154,15 +155,19 @@ export function RegisterPage() {
 
         <div className="grid grid-cols-2 gap-3">
           <a
-            href="/api/auth/oauth/google/url?redirect=true"
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            href="/api/v1/auth/oauth/google/url?redirect=true"
+            aria-label="Sign up with Google"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
           >
+            <GoogleIcon size={18} />
             <span>Google</span>
           </a>
           <a
-            href="/api/auth/oauth/github/url?redirect=true"
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            href="/api/v1/auth/oauth/github/url?redirect=true"
+            aria-label="Sign up with GitHub"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
           >
+            <GitHubIcon size={18} />
             <span>GitHub</span>
           </a>
         </div>

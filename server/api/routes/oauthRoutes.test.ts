@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../../app';
+import { db } from '../../infrastructure/database';
+import { migrate } from '../../infrastructure/db/migrate';
 
 describe('OAuth API Routes (/api/auth/oauth)', () => {
+  beforeAll(() => {
+    migrate(db);
+  });
   it('GET /api/auth/oauth/:provider/url returns authorization URL and sets state cookie for google', async () => {
     const res = await request(app).get('/api/auth/oauth/google/url');
     expect(res.status).toBe(200);
@@ -46,5 +51,25 @@ describe('OAuth API Routes (/api/auth/oauth)', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('Missing OAuth authorization code');
+  });
+
+  it('GET /api/auth/oauth/:provider/url?redirect=true redirects to Google OAuth authorization endpoint', async () => {
+    const res = await request(app).get('/api/auth/oauth/google/url?redirect=true');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain('https://accounts.google.com/o/oauth2/v2/auth');
+  });
+
+  it('GET /api/auth/oauth/callback with valid state completes login and sets session cookies', async () => {
+    const res = await request(app)
+      .get('/api/auth/oauth/google/callback?code=dev_mock_google&state=valid_state')
+      .set('Cookie', ['oauth_state=valid_state']);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('/');
+
+    const cookies = res.headers['set-cookie'];
+    const cookieList = Array.isArray(cookies) ? cookies : cookies ? [cookies] : [];
+    expect(cookieList.some((c: string) => c.startsWith('access='))).toBe(true);
+    expect(cookieList.some((c: string) => c.startsWith('refresh='))).toBe(true);
   });
 });

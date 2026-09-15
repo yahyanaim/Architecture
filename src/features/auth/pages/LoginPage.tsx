@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { validateLoginPassword } from '../lib/password';
 import { apiErrorMessage } from '@/lib/errors';
 import { toast } from 'sonner';
-import { Loader2, KeyRound } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { passkeyApi } from '../api/passkeyApi';
+import { GoogleIcon, GitHubIcon, PasskeyIcon } from '../components/AuthIcons';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -17,6 +18,13 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const justVerified = searchParams.get('verified') === '1';
+  const oauthError = searchParams.get('error');
+
+  useEffect(() => {
+    if (oauthError) {
+      toast.error(oauthError);
+    }
+  }, [oauthError]);
 
   const validate = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -107,7 +115,7 @@ export function LoginPage() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
-              <Link to="/password-reset" className="text-xs text-gray-500 hover:text-black">
+              <Link to="/forgot-password" className="text-xs text-gray-500 hover:text-black">
                 Forgot password?
               </Link>
             </div>
@@ -137,12 +145,12 @@ export function LoginPage() {
           onClick={handlePasskeyLogin}
           disabled={isPasskeyLoading || isLoading}
           aria-label="Continue with Passkey"
-          className="w-full mt-3 bg-white border border-gray-300 text-gray-800 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full mt-3 bg-white border border-gray-300 text-gray-800 py-2.5 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
         >
           {isPasskeyLoading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <KeyRound className="w-4 h-4 text-gray-700" />
+            <PasskeyIcon size={18} className="text-gray-700" />
           )}
           Continue with Passkey
         </button>
@@ -158,15 +166,19 @@ export function LoginPage() {
 
         <div className="grid grid-cols-2 gap-3">
           <a
-            href="/api/auth/oauth/google/url?redirect=true"
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            href="/api/v1/auth/oauth/google/url?redirect=true"
+            aria-label="Sign in with Google"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
           >
+            <GoogleIcon size={18} />
             <span>Google</span>
           </a>
           <a
-            href="/api/auth/oauth/github/url?redirect=true"
-            className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            href="/api/v1/auth/oauth/github/url?redirect=true"
+            aria-label="Sign in with GitHub"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
           >
+            <GitHubIcon size={18} />
             <span>GitHub</span>
           </a>
         </div>

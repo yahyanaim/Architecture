@@ -335,6 +335,17 @@ export class AuthController {
         return;
       }
 
+      if (!this.oauthService.hasRealCredentials(provider)) {
+        const envKey = provider === 'google' ? 'GOOGLE_CLIENT_ID' : 'GITHUB_CLIENT_ID';
+        const msg = `${provider === 'google' ? 'Google' : 'GitHub'} OAuth is not configured. Please set ${envKey} and ${envKey.replace('_ID', '_SECRET')} in your .env file.`;
+        if (req.query.redirect === 'true') {
+          res.redirect(`/login?error=${encodeURIComponent(msg)}`);
+          return;
+        }
+        res.status(400).json({ message: msg });
+        return;
+      }
+
       const state = globalThis.crypto.randomUUID();
       res.cookie('oauth_state', state, {
         httpOnly: true,
@@ -403,7 +414,11 @@ export class AuthController {
       } else {
         res.redirect('/');
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (!req.headers.accept?.includes('application/json') && req.method === 'GET') {
+        res.redirect(`/login?error=${encodeURIComponent(err?.message || 'OAuth authentication failed')}`);
+        return;
+      }
       next(err);
     }
   };

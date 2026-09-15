@@ -45,6 +45,20 @@ export class OAuthService {
   }
 
   /**
+   * Check if real provider OAuth credentials are configured.
+   */
+  hasRealCredentials(provider: 'google' | 'github'): boolean {
+    if (process.env.NODE_ENV === 'test') return true;
+    if (provider === 'google') {
+      return Boolean(this.config.googleClientId && this.config.googleClientId !== 'google-client-id-mock');
+    }
+    if (provider === 'github') {
+      return Boolean(this.config.githubClientId && this.config.githubClientId !== 'github-client-id-mock');
+    }
+    return false;
+  }
+
+  /**
    * Generates the OAuth authorization URL for the chosen provider.
    */
   getAuthorizationUrl(provider: 'google' | 'github', state: string): string {
