@@ -85,6 +85,13 @@ export function LoginPage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 w-full max-w-md">
         <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center mb-4">
+            <img
+              src="/logo.png"
+              alt="Clean Architecture"
+              className="w-12 h-12 rounded-xl object-contain shadow-xs"
+            />
+          </div>
           <h1 className="text-2xl font-bold text-black">Welcome Back</h1>
           <p className="text-gray-500 mt-2">Sign in to your account</p>
           {justVerified && (

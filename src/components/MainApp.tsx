@@ -22,8 +22,8 @@ export function MainApp({ initialTab = 'architecture' }: MainAppProps) {
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[88px] md:pt-[96px] pb-24 md:pb-8 flex-grow w-full">
-        <div className="text-center py-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[88px] md:pt-[96px] pb-24 md:pb-12 flex-grow w-full flex flex-col justify-center items-center">
+        <div className="text-center py-6 w-full max-w-5xl my-auto flex flex-col items-center justify-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold mb-4">
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>92 Vitest Tests Passing · Audit-Hardened Architecture</span>
@@ -64,7 +64,7 @@ export function MainApp({ initialTab = 'architecture' }: MainAppProps) {
 
           {/* TAB 1: Architecture Overview */}
           {activeTab === 'architecture' && (
-            <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6 text-left max-w-6xl mx-auto animate-in fade-in duration-300">
+            <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6 text-left w-full mx-auto animate-in fade-in duration-300">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 transition-all hover:shadow-md">
                 <h3 className="font-semibold text-black mb-4 flex items-center gap-2">
                   <SiReact className="w-5 h-5 text-sky-500" />

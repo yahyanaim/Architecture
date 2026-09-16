@@ -108,7 +108,11 @@ export function Header() {
               onClick={goHome}
               className="flex items-center gap-2.5 hover:opacity-80 transition-opacity cursor-pointer group shrink-0 whitespace-nowrap"
             >
-              <span className="w-2.5 h-2.5 rounded-full bg-black shadow-xs transition-transform group-hover:scale-125" />
+              <img
+                src="/logo.png"
+                alt="Clean Architecture Logo"
+                className="w-7 h-7 rounded-lg object-contain shadow-xs transition-transform group-hover:scale-105"
+              />
               <span className="font-bold text-black text-sm tracking-tight whitespace-nowrap">
                 Clean Architecture
               </span>
@@ -181,7 +185,11 @@ export function Header() {
             onClick={goHome}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer whitespace-nowrap"
           >
-            <span className="w-2.5 h-2.5 rounded-full bg-black shadow-xs" />
+            <img
+              src="/logo.png"
+              alt="Clean Architecture Logo"
+              className="w-6 h-6 rounded-md object-contain shadow-xs"
+            />
             <span className="font-bold text-black text-sm tracking-tight whitespace-nowrap">
               Clean Architecture
             </span>
