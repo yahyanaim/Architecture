@@ -5,8 +5,9 @@ import { migrate } from "./server/infrastructure/db/migrate";
 import { migratePg } from "./server/infrastructure/db/migratePg";
 import { closePgPool } from "./server/infrastructure/pg";
 import { closeRedis } from "./server/infrastructure/redis";
+import { closeDb } from "./server/infrastructure/database";
 import { jobQueue, outboxRelay } from "./server/infrastructure/repositories/SharedUserRepository";
-import { logger } from "./server/infrastructure/observability";
+import { logger, closeSentry } from "./server/infrastructure/observability";
 
 // Process entry point (dev vs prod lifecycle):
 // - development: mount Vite middleware so the same port serves the API and
@@ -49,20 +50,61 @@ async function startServer() {
   const server = app.listen(PORT, "0.0.0.0", () => logger.info(`up`, { port: PORT }));
 
   // Graceful shutdown: stop timers so in-flight jobs finish draining.
-  const shutdown = async () => {
-    jobQueue.stopWorker();
-    outboxRelay.stop();
-    if (DATABASE_URL) {
-      await closePgPool().catch(() => {});
+  let isShuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logger.info(`[shutdown] ${signal} received, starting graceful teardown`);
+
+    const forceExitTimer = setTimeout(() => {
+      logger.error('[shutdown] graceful teardown timed out, forcing exit');
+      process.exit(1);
+    }, 5000);
+    forceExitTimer.unref();
+
+    try {
+      // 1. Stop background workers
+      jobQueue.stopWorker();
+      outboxRelay.stop();
+      logger.info('[shutdown] background workers stopped');
+
+      // 2. Close HTTP server to stop accepting new requests
+      await new Promise<void>((resolve) => {
+        server.close((err) => {
+          if (err) logger.warn('[shutdown] HTTP server close error', { error: err.message });
+          else logger.info('[shutdown] HTTP server closed');
+          resolve();
+        });
+      });
+
+      // 3. Drain and close database handles
+      if (DATABASE_URL) {
+        await closePgPool().catch((e) => logger.error('[shutdown] error closing pg pool', { error: (e as Error).message }));
+        logger.info('[shutdown] PostgreSQL pool drained');
+      } else {
+        closeDb();
+        logger.info('[shutdown] SQLite database closed');
+      }
+
+      // 4. Close Redis connection
+      if (REDIS_URL) {
+        await closeRedis().catch((e) => logger.error('[shutdown] error closing redis', { error: (e as Error).message }));
+        logger.info('[shutdown] Redis disconnected');
+      }
+
+      // 5. Flush and close Sentry
+      await closeSentry(2000).catch(() => {});
+
+      logger.info('[shutdown] graceful teardown complete');
+      process.exit(0);
+    } catch (err) {
+      logger.error('[shutdown] error during teardown', { error: (err as Error).message });
+      process.exit(1);
     }
-    if (REDIS_URL) {
-      await closeRedis().catch(() => {});
-    }
-    server.close(() => process.exit(0));
-    setTimeout(() => process.exit(1), 5000).unref();
   };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer();

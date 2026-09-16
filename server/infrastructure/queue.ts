@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db } from './database';
-import { logger } from './observability';
+import { logger, getTraceContext, runWithTraceContext } from './observability';
 import { Mailer, Email } from './mailer';
 import { APP_URL } from '../config/index';
 
@@ -99,12 +99,15 @@ export class JobQueue {
 
   async enqueue(type: string, payload: Record<string, unknown>, opts: { runAt?: Date; maxAttempts?: number } = {}): Promise<number> {
     const at = (opts.runAt ?? new Date()).toISOString();
+    const activeCtx = getTraceContext();
+    const traceId = (payload._traceId as string) || activeCtx?.traceId || crypto.randomUUID();
+    const payloadWithTrace = { ...payload, _traceId: traceId };
     const res = db
       .prepare(
         'INSERT INTO jobs (type, payload, status, run_at, attempts, max_attempts, last_error, locked_by, locked_at, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, NULL, NULL, NULL, ?, ?)'
       )
-      .run(type, JSON.stringify(payload), 'queued', at, opts.maxAttempts ?? 5, now(), now());
-    logger.debug('[jobs] enqueued', { type, id: res.lastInsertRowid });
+      .run(type, JSON.stringify(payloadWithTrace), 'queued', at, opts.maxAttempts ?? 5, now(), now());
+    logger.debug('[jobs] enqueued', { type, id: res.lastInsertRowid, traceId });
     return Number(res.lastInsertRowid);
   }
 
@@ -157,27 +160,34 @@ export class JobQueue {
           continue;
         }
 
-        try {
-          await handler(JSON.parse(job.payload));
-          db.prepare("UPDATE jobs SET status = 'done', locked_by = NULL, locked_at = NULL, updated_at = ? WHERE id = ?")
-            .run(now(), job.id);
-          done += 1;
-        } catch (err) {
-          const attempts = job.attempts + 1;
-          const backoffMin = Math.min(2 ** attempts, 60); // 2,4,8.. capped 60m
-          const nextRun = new Date(Date.now() + backoffMin * 60_000).toISOString();
-          if (attempts >= job.max_attempts) {
-            db.prepare(
-              "UPDATE jobs SET status = 'dead', locked_by = NULL, locked_at = NULL, attempts = ?, last_error = ?, updated_at = ? WHERE id = ?"
-            ).run(attempts, (err as Error).message, now(), job.id);
-            logger.error('[jobs] dead', { id: job.id, type: job.type, error: (err as Error).message });
-          } else {
-            db.prepare(
-              "UPDATE jobs SET status = 'queued', locked_by = NULL, locked_at = NULL, attempts = ?, run_at = ?, last_error = ?, updated_at = ? WHERE id = ?"
-            ).run(attempts, nextRun, (err as Error).message, now(), job.id);
-            logger.warn('[jobs] retry scheduled', { id: job.id, type: job.type, attempt: attempts });
+        const rawPayload = JSON.parse(job.payload);
+        const traceId = (rawPayload && typeof rawPayload === 'object' && rawPayload._traceId)
+          ? String(rawPayload._traceId)
+          : `job-${job.id}`;
+
+        await runWithTraceContext({ traceId, requestId: traceId }, async () => {
+          try {
+            await handler(rawPayload);
+            db.prepare("UPDATE jobs SET status = 'done', locked_by = NULL, locked_at = NULL, updated_at = ? WHERE id = ?")
+              .run(now(), job.id);
+            done += 1;
+          } catch (err) {
+            const attempts = job.attempts + 1;
+            const backoffMin = Math.min(2 ** attempts, 60); // 2,4,8.. capped 60m
+            const nextRun = new Date(Date.now() + backoffMin * 60_000).toISOString();
+            if (attempts >= job.max_attempts) {
+              db.prepare(
+                "UPDATE jobs SET status = 'dead', locked_by = NULL, locked_at = NULL, attempts = ?, last_error = ?, updated_at = ? WHERE id = ?"
+              ).run(attempts, (err as Error).message, now(), job.id);
+              logger.error('[jobs] dead', { id: job.id, type: job.type, traceId, error: (err as Error).message });
+            } else {
+              db.prepare(
+                "UPDATE jobs SET status = 'queued', locked_by = NULL, locked_at = NULL, attempts = ?, run_at = ?, last_error = ?, updated_at = ? WHERE id = ?"
+              ).run(attempts, nextRun, (err as Error).message, now(), job.id);
+              logger.warn('[jobs] retry scheduled', { id: job.id, type: job.type, attempt: attempts, traceId });
+            }
           }
-        }
+        });
       }
 
       // Opportunistic cleanup of long-expired refresh rows is handled by

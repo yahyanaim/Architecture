@@ -36,3 +36,14 @@ if (dbPath !== ':memory:') {
 db.pragma('foreign_keys = ON');
 
 export const DB_PATH = dbPath;
+
+/** Closes the SQLite database handle cleanly on shutdown. */
+export function closeDb(): void {
+  try {
+    if (db.open) {
+      db.close();
+    }
+  } catch (err) {
+    // Ignore close errors during process teardown
+  }
+}

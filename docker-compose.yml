@@ -42,6 +42,30 @@ services:
       MP_MAX_MESSAGES: 500
       MP_DATA_FILE: ""
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: architecture-app
+    restart: unless-stopped
+    ports:
+      - "40001:40001"
+    environment:
+      NODE_ENV: production
+      PORT: 40001
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/app_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: super-secret-jwt-token-for-docker-compose-production-test-12345
+      APP_URL: http://localhost:40001
+      CORS_ORIGIN: http://localhost:40001
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
+

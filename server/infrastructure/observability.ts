@@ -1,11 +1,73 @@
 import { Request, Response, NextFunction } from 'express';
-import { LOG_LEVEL, ERROR_WEBHOOK_URL } from '../config/index';
+import { AsyncLocalStorage } from 'async_hooks';
+import * as Sentry from '@sentry/node';
+import { LOG_LEVEL, ERROR_WEBHOOK_URL, SENTRY_DSN, SENTRY_ENVIRONMENT } from '../config/index';
 
 // ============================================================================
 // Observability: structured logs + request metrics + error reporting hook.
-// Zero dependencies by design — swap transports (Sentry/Pino/OTel) here
-// without touching call sites.
+// Supports Sentry (@sentry/node) when SENTRY_DSN is configured, AsyncLocalStorage
+// for distributed trace propagation, and fire-and-forget 5xx webhooks.
 // ============================================================================
+
+export interface TraceContext {
+  traceId: string;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+const traceStorage = new AsyncLocalStorage<TraceContext>();
+
+/** Runs a synchronous or asynchronous callback within the provided trace context. */
+export function runWithTraceContext<T>(context: TraceContext, fn: () => T): T {
+  return traceStorage.run(context, fn);
+}
+
+/** Retrieves the current active trace context if present. */
+export function getTraceContext(): TraceContext | undefined {
+  return traceStorage.getStore();
+}
+
+let sentryInitialized = false;
+
+/** Initializes Sentry error reporting if DSN is provided. */
+export function initSentry(dsn = SENTRY_DSN, environment = SENTRY_ENVIRONMENT): boolean {
+  if (!dsn) return false;
+  try {
+    Sentry.init({
+      dsn,
+      environment: environment || process.env.NODE_ENV || 'development',
+      tracesSampleRate: 1.0,
+      integrations: [],
+    });
+    sentryInitialized = true;
+    return true;
+  } catch (err) {
+    console.error('[sentry] failed to initialize:', err);
+    return false;
+  }
+}
+
+/** Checks whether Sentry is currently active. */
+export function isSentryInitialized(): boolean {
+  return sentryInitialized;
+}
+
+/** Cleanly closes and flushes Sentry events. */
+export async function closeSentry(timeoutMs = 2000): Promise<void> {
+  if (!sentryInitialized) return;
+  try {
+    await Sentry.close(timeoutMs);
+  } catch {
+    // Ignore close errors during shutdown
+  } finally {
+    sentryInitialized = false;
+  }
+}
+
+// Auto-initialize Sentry at startup if SENTRY_DSN is configured
+if (SENTRY_DSN) {
+  initSentry();
+}
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 const ORDER: Record<Level, number> = { debug: 0, info: 1, warn: 2, error: 3 };
@@ -58,7 +120,22 @@ function emit(level: Level, msg: string, fields: Record<string, unknown> = {}): 
   if (ORDER[level] < ORDER[MIN]) return;
   const cleanMsg = typeof msg === 'string' ? msg.replace(EMAIL_REGEX, '***') : msg;
   const cleanFields = redactPII(fields) as Record<string, unknown>;
-  const line = JSON.stringify({ ts: new Date().toISOString(), level, msg: cleanMsg, pid: process.pid, ...cleanFields });
+  const activeCtx = getTraceContext();
+  const traceFields: Record<string, unknown> = {};
+  if (activeCtx?.traceId && cleanFields.traceId === undefined) {
+    traceFields.traceId = activeCtx.traceId;
+  }
+  if (activeCtx?.requestId && cleanFields.requestId === undefined) {
+    traceFields.requestId = activeCtx.requestId;
+  }
+  const line = JSON.stringify({
+    ts: new Date().toISOString(),
+    level,
+    msg: cleanMsg,
+    pid: process.pid,
+    ...traceFields,
+    ...cleanFields,
+  });
   if (level === 'error' || level === 'warn') console.error(line);
   else console.log(line);
 }
@@ -68,24 +145,65 @@ export const logger = {
   info: (msg: string, fields?: Record<string, unknown>) => emit('info', msg, fields),
   warn: (msg: string, fields?: Record<string, unknown>) => emit('warn', msg, fields),
   error: (msg: string, fields?: Record<string, unknown>) => emit('error', msg, fields),
-  /** Logger bound to a request (propagates `x-request-id` into every line). */
+  /** Logger bound to a request (propagates `x-request-id` and `x-trace-id` into every line). */
   forRequest: (req: Request) => ({
-    debug: (msg: string, fields?: Record<string, unknown>) => emit('debug', msg, { requestId: (req as any).requestId, ...fields }),
-    info: (msg: string, fields?: Record<string, unknown>) => emit('info', msg, { requestId: (req as any).requestId, ...fields }),
-    warn: (msg: string, fields?: Record<string, unknown>) => emit('warn', msg, { requestId: (req as any).requestId, ...fields }),
-    error: (msg: string, fields?: Record<string, unknown>) => emit('error', msg, { requestId: (req as any).requestId, ...fields }),
+    debug: (msg: string, fields?: Record<string, unknown>) =>
+      emit('debug', msg, { requestId: (req as any).requestId, traceId: (req as any).traceId, ...fields }),
+    info: (msg: string, fields?: Record<string, unknown>) =>
+      emit('info', msg, { requestId: (req as any).requestId, traceId: (req as any).traceId, ...fields }),
+    warn: (msg: string, fields?: Record<string, unknown>) =>
+      emit('warn', msg, { requestId: (req as any).requestId, traceId: (req as any).traceId, ...fields }),
+    error: (msg: string, fields?: Record<string, unknown>) =>
+      emit('error', msg, { requestId: (req as any).requestId, traceId: (req as any).traceId, ...fields }),
   }),
 };
 
-/** Fire-and-forget 5xx reporter. Never throws, never blocks the response. */
+/** Fire-and-forget 5xx reporter. Dispatches to Sentry and/or ERROR_WEBHOOK_URL. */
 export function reportError(err: Error, ctx: Record<string, unknown> = {}): void {
-  logger.error(err.message, { ...ctx, stack: err.stack });
+  const activeCtx = getTraceContext();
+  const traceId = (ctx.traceId as string) || (ctx.requestId as string) || activeCtx?.traceId;
+  const requestId = (ctx.requestId as string) || activeCtx?.requestId;
+
+  const mergedCtx = { ...ctx };
+  if (traceId && !mergedCtx.traceId) mergedCtx.traceId = traceId;
+  if (requestId && !mergedCtx.requestId) mergedCtx.requestId = requestId;
+
+  logger.error(err.message, { ...mergedCtx, stack: err.stack });
+
+  // 1. Sentry capture when initialized or when DSN is present
+  if (sentryInitialized || SENTRY_DSN) {
+    if (!sentryInitialized && SENTRY_DSN) {
+      initSentry();
+    }
+    if (sentryInitialized) {
+      try {
+        Sentry.withScope((scope) => {
+          if (traceId) scope.setTag('traceId', traceId);
+          if (requestId) scope.setTag('requestId', requestId);
+          scope.setTag('node_env', SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development');
+          if (ctx.url) scope.setExtra('url', String(ctx.url));
+          if (ctx.method) scope.setExtra('method', String(ctx.method));
+          const redacted = redactPII(mergedCtx);
+          scope.setContext('details', redacted as Record<string, any>);
+          Sentry.captureException(err);
+        });
+      } catch (sentryErr) {
+        console.error('[sentry] failed to capture exception:', sentryErr);
+      }
+    }
+  }
+
+  // 2. ERROR_WEBHOOK_URL fallback
   if (!ERROR_WEBHOOK_URL) return;
   try {
     void fetch(ERROR_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: `5xx: ${err.message}`, ctx, at: new Date().toISOString() }),
+      body: JSON.stringify({
+        text: `5xx: ${err.message}`,
+        ctx: redactPII(mergedCtx),
+        at: new Date().toISOString(),
+      }),
     }).catch(() => undefined);
   } catch {
     // reporting must never break the app

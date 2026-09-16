@@ -32,9 +32,16 @@ export const errorHandler = (
 
   // Unexpected 5xx: structured report (log + optional webhook/Sentry-style
   // ingest) with request context, generic body to the client (no leak).
-  reportError(err, { url: _req.url, method: _req.method, requestId: (_req as any).requestId });
+  const traceId = (_req as any).traceId || (_req as any).requestId;
+  reportError(err, {
+    url: _req.url,
+    method: _req.method,
+    requestId: (_req as any).requestId,
+    traceId,
+  });
   res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
     error: 'Internal Server Error',
     message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    traceId,
   });
 };

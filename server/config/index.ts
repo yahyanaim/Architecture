@@ -46,6 +46,10 @@ export const APP_URL = process.env.APP_URL || 'http://localhost:40001';
 // receives fire-and-forget 5xx reports; unset = log only.
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 export const ERROR_WEBHOOK_URL = process.env.ERROR_WEBHOOK_URL || '';
+export const SENTRY_DSN = process.env.SENTRY_DSN?.trim() || '';
+export const SENTRY_ENVIRONMENT = process.env.SENTRY_ENVIRONMENT?.trim() || NODE_ENV;
+export const OTEL_EXPORTER_OTLP_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() || '';
+export { NODE_ENV };
 
 // Billing (Stripe). All optional: when STRIPE_SECRET_KEY is unset the
 // checkout/portal endpoints answer 501 (fail-explicit) while the webhook
@@ -121,6 +125,10 @@ export default {
   APP_URL,
   LOG_LEVEL,
   ERROR_WEBHOOK_URL,
+  SENTRY_DSN,
+  SENTRY_ENVIRONMENT,
+  OTEL_EXPORTER_OTLP_ENDPOINT,
+  NODE_ENV,
   STRIPE_SECRET_KEY,
   STRIPE_WEBHOOK_SECRET,
   STRIPE_PRICE_PRO,

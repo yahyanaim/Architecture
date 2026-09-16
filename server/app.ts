@@ -13,7 +13,7 @@ import { authenticate } from './api/middleware/authenticate';
 import { createRequireActiveUser } from './api/middleware/requireActiveUser';
 import { authorizeAdmin } from './api/middleware/authorize';
 import { userRepository } from './infrastructure/repositories/SharedUserRepository';
-import { CORS_ORIGINS, TRUST_PROXY, IS_PROD } from './config/index';
+import { CORS_ORIGINS, TRUST_PROXY, IS_PROD, DATABASE_URL } from './config/index';
 
 import { swaggerSpec } from './config/swagger';
 import swaggerUi from 'swagger-ui-express';
@@ -125,10 +125,18 @@ const liveHealthHandler = (_req: express.Request, res: express.Response) => {
   });
 };
 
-const readyHealthHandler = (_req: express.Request, res: express.Response) => {
+const readyHealthHandler = async (_req: express.Request, res: express.Response) => {
   try {
     const start = Date.now();
-    db.prepare('SELECT 1').get();
+    if (DATABASE_URL) {
+      const { getPgPool } = await import('./infrastructure/pg');
+      await getPgPool().query('SELECT 1');
+    } else {
+      if (!db.open) {
+        throw new Error('Database connection is closed');
+      }
+      db.prepare('SELECT 1').get();
+    }
     const dbLatencyMs = Date.now() - start;
 
     const memory = process.memoryUsage();
