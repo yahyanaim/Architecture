@@ -22,7 +22,7 @@ export function MainApp({ initialTab = 'architecture' }: MainAppProps) {
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <Header />
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[88px] md:pt-[96px] pb-24 md:pb-8 flex-grow w-full">
         <div className="text-center py-6">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold mb-4">
             <CheckCircle2 className="w-3.5 h-3.5" />

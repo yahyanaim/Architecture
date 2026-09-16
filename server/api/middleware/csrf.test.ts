@@ -27,7 +27,7 @@ describe('CSRF Double-Submit Middleware', () => {
       .post('/api/v1/auth/login')
       .send({ email: userEmail, password: 'StrongPass123!' });
 
-    sessionCookies = loginRes.headers['set-cookie'] as string[];
+    sessionCookies = (loginRes.headers['set-cookie'] as unknown as string[]) || [];
   });
 
   it('provisions csrf_token and XSRF-TOKEN cookies on safe GET requests', async () => {
@@ -35,7 +35,7 @@ describe('CSRF Double-Submit Middleware', () => {
     expect(res.status).toBe(200);
     expect(res.body.csrfToken).toBeDefined();
 
-    const setCookie = res.headers['set-cookie'] as string[];
+    const setCookie = (res.headers['set-cookie'] as unknown as string[]) || [];
     expect(setCookie).toBeDefined();
     expect(setCookie.some((c) => c.includes('csrf_token='))).toBe(true);
     expect(setCookie.some((c) => c.includes('XSRF-TOKEN='))).toBe(true);
@@ -68,7 +68,7 @@ describe('CSRF Double-Submit Middleware', () => {
     let csrfToken = '';
     for (const c of sessionCookies) {
       const match = c.match(/csrf_token=([^;]+)/);
-      if (match) {
+      if (match && match[1]) {
         csrfToken = match[1];
         break;
       }
@@ -88,7 +88,7 @@ describe('CSRF Double-Submit Middleware', () => {
 
   it('exempts pure Bearer token authenticated requests from requiring CSRF header', async () => {
     const loginRes = await authService.login(userEmail, 'StrongPass123!');
-    const token = loginRes.tokens.access;
+    const token = loginRes.tokens?.access || '';
 
     const res = await request(app)
       .post('/api/v1/workspaces')

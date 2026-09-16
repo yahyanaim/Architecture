@@ -145,4 +145,29 @@ describe('Router Guard & Route Access Tests', () => {
       expect(screen.getByText(/Admin Only/i)).toBeInTheDocument();
     });
   });
+
+  it('Guard 4: bounces unauthenticated visitors from /docs to /login', async () => {
+    vi.mocked(authApi.me).mockRejectedValueOnce(new Error('unauthenticated'));
+
+    renderAt('/docs');
+
+    await waitFor(() => {
+      expect(screen.getByText(/Welcome Back/i)).toBeInTheDocument();
+    });
+  });
+
+  it('Guard 5: permits authenticated regular user (role: user) to access /docs', async () => {
+    vi.mocked(authApi.me).mockResolvedValueOnce({
+      id: 'usr-regular',
+      name: 'Regular Member',
+      email: 'member@test.com',
+      role: 'user',
+    });
+
+    renderAt('/docs');
+
+    await waitFor(() => {
+      expect(screen.getByText(/Du Template à la Production/i)).toBeInTheDocument();
+    });
+  });
 });

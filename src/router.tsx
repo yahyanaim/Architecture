@@ -44,6 +44,9 @@ const ApiKeysPage = lazy(() =>
 const AdminAuditPage = lazy(() =>
   import('@/features/admin-audit/pages/AdminAuditPage').then((m) => ({ default: m.AdminAuditPage }))
 );
+const DocsPage = lazy(() =>
+  import('@/features/docs/pages/DocsPage').then((m) => ({ default: m.DocsPage }))
+);
 
 // ============================================================================
 // Predicate functions (pure, unit-testable)
@@ -82,6 +85,7 @@ function Loading() {
  */
 const TITLES: Record<string, string> = {
   '/': 'Clean Architecture',
+  '/docs': 'Documentation — Clean Architecture',
   '/login': 'Sign in — Clean Architecture',
   '/register': 'Create account — Clean Architecture',
   '/profile': 'Settings — Clean Architecture',
@@ -122,7 +126,7 @@ export function RequireAdmin() {
     return (
       <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
         <Header />
-        <main className="flex-grow w-full py-8 px-4">
+        <main className="flex-grow w-full pt-[88px] md:pt-[96px] pb-24 md:pb-8 px-4">
           <Forbidden403 />
         </main>
         <Footer />
@@ -162,7 +166,7 @@ function ProfileRoute() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <Header />
-      <main className="flex-grow w-full py-8 px-4">
+      <main className="flex-grow w-full pt-[88px] md:pt-[96px] pb-24 md:pb-8 px-4">
         <ProfileSettings />
       </main>
       <Footer />
@@ -174,7 +178,7 @@ function WorkspacesRoute() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <Header />
-      <main className="flex-grow w-full py-8 px-4">
+      <main className="flex-grow w-full pt-[88px] md:pt-[96px] pb-24 md:pb-8 px-4">
         <WorkspacesPage />
       </main>
       <Footer />
@@ -186,7 +190,7 @@ function ApiKeysRoute() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <Header />
-      <main className="flex-grow w-full py-8 px-4">
+      <main className="flex-grow w-full pt-[88px] md:pt-[96px] pb-24 md:pb-8 px-4">
         <ApiKeysPage />
       </main>
       <Footer />
@@ -198,8 +202,20 @@ function AdminAuditRoute() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <Header />
-      <main className="flex-grow w-full py-8 px-4">
+      <main className="flex-grow w-full pt-[88px] md:pt-[96px] pb-24 md:pb-8 px-4">
         <AdminAuditPage />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+function DocsRoute() {
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
+      <Header />
+      <main className="flex-grow w-full pt-[88px] md:pt-[96px] pb-24 md:pb-8 px-4 sm:px-6 lg:px-8">
+        <DocsPage />
       </main>
       <Footer />
     </div>
@@ -228,6 +244,7 @@ export const router = createBrowserRouter([
     element: <UpgradeRedirector />,
     children: [
       { path: '/', element: <RequireAuth />, children: [{ index: true, element: <MainApp /> }] },
+      { path: '/docs', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><DocsRoute /></Suspense> }] },
       { path: '/profile', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><ProfileRoute /></Suspense> }] },
       { path: '/workspaces', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><WorkspacesRoute /></Suspense> }] },
       { path: '/api-keys', element: <RequireAuth />, children: [{ index: true, element: <Suspense fallback={<Loading />}><ApiKeysRoute /></Suspense> }] },

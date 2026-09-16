@@ -34,7 +34,7 @@ describe('Compliance: GDPR Data Portability & Erasure (/api/v1/me)', () => {
       .post('/api/v1/auth/login')
       .send({ email, password: 'SuperSecure123!' });
 
-    sessionCookies = loginRes.headers['set-cookie'] as string[];
+    sessionCookies = (loginRes.headers['set-cookie'] as unknown as string[]) || [];
 
     // Insert an audit log event
     audit('user.login_attempt', user.id, { email: user.email, ip: '127.0.0.1', orgId: user.orgId });

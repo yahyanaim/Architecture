@@ -52,7 +52,7 @@ describe('Observability PII Redaction', () => {
     });
 
     expect(logSpy).toHaveBeenCalled();
-    const loggedJson = JSON.parse(logSpy.mock.calls[0][0]);
+    const loggedJson = JSON.parse(logSpy.mock.calls[0]?.[0] || '{}');
     expect(loggedJson.msg).toBe('Invite sent to ***');
     expect(loggedJson.recipient).toBe('***');
     expect(loggedJson.secretCode).toBe('***');
